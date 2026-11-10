@@ -14,7 +14,7 @@
     cards: [], lists: [], board: { labels: [], members: [], customFields: [] },
     listById: {}, cfById: {},
     view: 'month', cursor: startOfDay(new Date()), q: '',
-    canWrite: false, loaded: false
+    canWrite: false, canEdit: false, templates: [], templateIds: {}, loaded: false
   };
 
   // ───────────────────────── Fechas ─────────────────────────
@@ -111,7 +111,7 @@
   function buildIndex() {
     var idx = {}, unscheduled = [];
     state.cards.forEach(function (card) {
-      if (!passesFilters(card)) return;
+      if (state.templateIds[card.id] || !passesFilters(card)) return;
       var ev = eventOf(card);
       if (!ev) { unscheduled.push(card); return; }
       var span = Math.min(diffDays(ev.startKey, ev.endKey), 366);
@@ -168,12 +168,15 @@
     var tip = card.name + (state.listById[card.idList] ? ' — ' + state.listById[card.idList].name : '');
     return '<div class="' + cls.join(' ') + '"' + style + ' tabindex="0" role="button"' +
       ' data-id="' + esc(card.id) + '"' + (dayKey ? ' data-from="' + dayKey + '"' : '') +
-      (state.canWrite ? ' draggable="true"' : '') + ' title="' + esc(tip) + '">' +
+      (state.canEdit ? ' draggable="true"' : '') + ' title="' + esc(tip) + '">' +
       time + '<span class="name">' + esc(card.name) + '</span>' + meta + av + '</div>';
   }
 
   // ───────────────────────── Vistas ─────────────────────────
   var MAX_PER_CELL = 5;
+  function addBtn(k) {
+    return state.canEdit ? '<button class="add" data-add="' + k + '" title="Añadir tarjeta" aria-label="Añadir tarjeta">+</button>' : '';
+  }
 
   function daysRow(first, n) {
     var out = [];
@@ -202,7 +205,7 @@
     days.forEach(function (d) {
       var k = key(d), items = idx[k] || [];
       var cls = 'day' + (d.getMonth() !== c.getMonth() ? ' other' : '') + (k === today ? ' today' : '');
-      html += '<div class="' + cls + '" data-date="' + k + '"><span class="dnum">' + d.getDate() + '</span><div class="events">';
+      html += '<div class="' + cls + '" data-date="' + k + '"><div class="dhead"><span class="dnum">' + d.getDate() + '</span>' + addBtn(k) + '</div><div class="events">';
       items.slice(0, MAX_PER_CELL).forEach(function (it) { html += evHtml(it.card, it.ev, k, 'month'); });
       if (items.length > MAX_PER_CELL) {
         html += '<button class="more" data-goto="' + k + '">+' + (items.length - MAX_PER_CELL) + ' más</button>';
@@ -223,7 +226,7 @@
       }).join('') + '</div><div class="grid">';
     days.forEach(function (d) {
       var k = key(d), items = idx[k] || [];
-      html += '<div class="day' + (k === today ? ' today' : '') + '" data-date="' + k + '"><div class="events">';
+      html += '<div class="day' + (k === today ? ' today' : '') + '" data-date="' + k + '"><div class="dhead">' + addBtn(k) + '</div><div class="events">';
       items.forEach(function (it) { html += evHtml(it.card, it.ev, k, 'week'); });
       html += '</div></div>';
     });
@@ -237,7 +240,7 @@
       if (!items.length) continue;
       any = true;
       html += '<div class="aday' + (k === today ? ' today' : '') + '" data-date="' + k + '">' +
-        '<div class="adate">' + esc(fmt(d, { weekday: 'long', day: 'numeric' })) +
+        '<div class="adate">' + addBtn(k) + esc(fmt(d, { weekday: 'long', day: 'numeric' })) +
         '<small>' + esc(fmt(d, { month: 'long', year: 'numeric' })) + '</small></div><div class="events">';
       items.forEach(function (it) { html += evHtml(it.card, it.ev, k, 'agenda'); });
       html += '</div></div>';
@@ -327,14 +330,16 @@
   }
 
   // ───────────────────────── Escritura en Trello ─────────────────────────
-  function apiPut(path, body) {
-    if (t.__mockWrite) return t.__mockWrite(path, body);
+  function apiPut(path, body) { return apiRequest('PUT', path, body); }
+  function apiRequest(method, path, body) {
+    if (t.__mockWrite) return t.__mockWrite(path, body, method);
     return t.getRestApi().getToken().then(function (token) {
       if (!token) throw new Error('No autorizado');
       var url = 'https://api.trello.com/1' + path + (path.indexOf('?') === -1 ? '?' : '&') +
         'key=' + encodeURIComponent(C.APP_KEY) + '&token=' + encodeURIComponent(token);
       return fetch(url, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        method: method, headers: { 'Content-Type': 'application/json' },
+        body: body && method !== 'GET' ? JSON.stringify(body) : undefined
       }).then(function (r) {
         if (!r.ok) return r.text().then(function (txt) { throw new Error(txt || ('HTTP ' + r.status)); });
         return r.json();
@@ -477,11 +482,16 @@
     document.body.addEventListener('click', function (e) {
       var more = e.target.closest('.more');
       if (more) { state.cursor = fromKey(more.getAttribute('data-goto')); setView('week'); return; }
+      var add = e.target.closest('[data-add]');
+      if (add) { e.stopPropagation(); openNew(add.getAttribute('data-add')); return; }
       var ev = e.target.closest('.ev');
-      if (ev) openCard(ev.getAttribute('data-id'));
+      if (ev) { openCard(ev.getAttribute('data-id')); return; }
+      // Clic en el hueco libre de un día → nueva tarjeta
+      var day = e.target.closest('.day');
+      if (day && state.canEdit && !e.target.closest('.more') && e.target.closest('#cal')) openNew(day.getAttribute('data-date'));
     });
     document.body.addEventListener('keydown', function (e) {
-      if (e.target.matches('input, select, textarea')) return;
+      if (e.target.matches('input, select, textarea') || !$('dlg').hidden) return;
       if (e.key === 'Enter' && e.target.classList.contains('ev')) openCard(e.target.getAttribute('data-id'));
       else if (e.key === 'ArrowLeft') move(-1);
       else if (e.key === 'ArrowRight') move(1);
@@ -495,7 +505,8 @@
     var drag = null;
     document.body.addEventListener('dragstart', function (e) {
       var ev = e.target.closest && e.target.closest('.ev');
-      if (!ev || !state.canWrite) return;
+      if (!ev) return;
+      if (!state.canWrite) { e.preventDefault(); askAuth('Para mover tarjetas de día, autoriza una vez el calendario.'); return; }
       drag = { id: ev.getAttribute('data-id'), from: ev.getAttribute('data-from') };
       ev.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -526,12 +537,8 @@
       else reschedule(card, tg.getAttribute('data-date'), drag.from);
     });
 
-    $('authBtn').onclick = function () {
-      t.getRestApi().authorize({ scope: 'read,write', expiration: 'never' })
-        .then(function () { return checkAuth(); })
-        .then(function () { render(); toast('Autorizado: ya puedes arrastrar tarjetas'); })
-        .catch(function () { toast('Autorización cancelada', true); });
-    };
+    $('authBtn').onclick = doAuthorize;
+    bindDialog();
   }
 
   function openCard(id) {
@@ -542,10 +549,127 @@
     });
   }
 
+  // ───────────────────────── Autorización ─────────────────────────
+  function doAuthorize() {
+    // Debe llamarse desde un clic del usuario (abre una ventana de Trello).
+    return t.getRestApi().authorize({ scope: 'read,write', expiration: 'never' })
+      .then(function () { return checkAuth(); })
+      .then(function () { closeDialog(); render(); toast('Autorizado: ya puedes mover y crear tarjetas'); return true; })
+      .catch(function (err) {
+        toast('No se completó la autorización' + (err && err.message ? ': ' + err.message : '') +
+          '. Si no se abrió ninguna ventana, permite las ventanas emergentes para trello.com.', true);
+        return false;
+      });
+  }
+  var pendingNew = null;
+  function askAuth(msg, after) {
+    pendingNew = after || null;
+    showDialog('auth');
+    $('authMsg').textContent = msg;
+  }
+
+  // ───────────────────────── Plantillas ─────────────────────────
+  var templatesLoading = null;
+  function loadTemplates() {
+    if (templatesLoading) return templatesLoading;
+    templatesLoading = Promise.resolve(t.board('id')).then(function (b) {
+      return apiRequest('GET', '/boards/' + b.id + '/cards?filter=open&fields=name,isTemplate,idList,labels');
+    }).then(function (cards) {
+      state.templates = (cards || []).filter(function (c) { return c.isTemplate; });
+      state.templateIds = {};
+      state.templates.forEach(function (c) { state.templateIds[c.id] = true; });
+      render();
+    }).catch(function () { state.templates = []; })
+      .then(function () { templatesLoading = null; });
+    return templatesLoading;
+  }
+
+  // ───────────────────────── Nueva tarjeta ─────────────────────────
+  var dlgKey = null;
+  function showDialog(which) {
+    $('dlg').hidden = false;
+    $('dlgAuth').hidden = which !== 'auth';
+    $('nForm').hidden = which !== 'new';
+  }
+  function closeDialog() { $('dlg').hidden = true; dlgKey = null; }
+
+  function openNew(dayKey) {
+    if (!state.canEdit) return;
+    if (!state.canWrite) { askAuth('Para crear tarjetas desde el calendario, autoriza una vez el calendario.', dayKey); return; }
+    dlgKey = dayKey;
+    $('nTitle').textContent = 'Nueva tarjeta · ' + fmt(fromKey(dayKey), { weekday: 'long', day: 'numeric', month: 'long' });
+    var lastList = state.prefs.lastList;
+    if (!state.listById[lastList]) lastList = state.lists[0] && state.lists[0].id;
+    $('nList').innerHTML = state.lists.map(function (l) {
+      return '<option value="' + esc(l.id) + '"' + (l.id === lastList ? ' selected' : '') + '>' + esc(l.name) + '</option>';
+    }).join('');
+    $('nTpl').innerHTML = '<option value="">Sin plantilla</option>' + state.templates.map(function (c) {
+      return '<option value="' + esc(c.id) + '"' + (c.id === state.prefs.lastTpl ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+    }).join('');
+    $('nTplRow').hidden = false;
+    $('nTplHint').textContent = state.templates.length ? '' :
+      'No hay plantillas en este tablero. Crea una tarjeta y márcala como plantilla en Trello para que aparezca aquí.';
+    var src = source(), showTime = src === 'due' || src === 'range' || src.indexOf('cf:') === 0;
+    $('nTimeRow').hidden = !showTime;
+    $('nTime').value = pad(state.cfg.defaultHour) + ':00';
+    $('nName').value = ''; $('nName').placeholder = 'Nombre de la tarjeta';
+    delete $('nList').dataset.touched;
+    showDialog('new');
+    setTimeout(function () { $('nName').focus(); }, 30);
+  }
+
+  function onTplChange() {
+    var tpl = state.templates.filter(function (c) { return c.id === $('nTpl').value; })[0];
+    if (tpl && !$('nName').value) $('nName').placeholder = tpl.name;
+    if (tpl && tpl.idList && state.listById[tpl.idList] && !$('nList').dataset.touched) $('nList').value = tpl.idList;
+  }
+
+  function createCard() {
+    var key = dlgKey, name = $('nName').value.trim(), idList = $('nList').value, tplId = $('nTpl').value;
+    var tpl = state.templates.filter(function (c) { return c.id === tplId; })[0];
+    if (!name && tpl) name = tpl.name;
+    if (!name) { $('nName').focus(); return; }
+    var hm = ($('nTime').value || (pad(state.cfg.defaultHour) + ':00')).split(':');
+    var d = fromKey(key); d.setHours(+hm[0] || 0, +hm[1] || 0, 0, 0);
+    var iso = d.toISOString(), src = source();
+    var body = { idList: idList, name: name, pos: 'bottom' };
+    if (src === 'start') body.start = iso;
+    else if (src === 'due' || src === 'range') body.due = iso;
+    if (tpl) { body.idCardSource = tpl.id; body.keepFromSource = 'all'; }
+    $('nCreate').disabled = true;
+    apiRequest('POST', '/cards', body).then(function (card) {
+      if (src.indexOf('cf:') === 0 && card && card.id) {
+        return apiPut('/cards/' + card.id + '/customField/' + src.slice(3) + '/item', { value: { date: iso } }).then(function () { return card; });
+      }
+      return card;
+    }).then(function (card) {
+      state.prefs.lastList = idList; state.prefs.lastTpl = tplId; savePrefs();
+      closeDialog();
+      toast('Tarjeta creada: “' + name + '”');
+      load();
+    }).catch(function (err) {
+      toast('No se pudo crear la tarjeta: ' + (err && err.message ? err.message : err), true);
+    }).then(function () { $('nCreate').disabled = false; });
+  }
+
+  function bindDialog() {
+    $('dlg').addEventListener('click', function (e) { if (e.target.id === 'dlg') closeDialog(); });
+    document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = closeDialog; });
+    $('dlgAuthBtn').onclick = function () {
+      var after = pendingNew; pendingNew = null;
+      doAuthorize().then(function (ok) { if (ok && after) openNew(after); });
+    };
+    $('nTpl').onchange = onTplChange;
+    $('nList').onchange = function () { $('nList').dataset.touched = '1'; };
+    $('nForm').onsubmit = function (e) { e.preventDefault(); createCard(); };
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) closeDialog(); });
+  }
+
   // ───────────────────────── Carga de datos ─────────────────────────
   function checkAuth() {
     var canEdit = !t.memberCanWriteToModel || t.memberCanWriteToModel('board');
-    if (t.__mockWrite) { state.canWrite = canEdit; $('authBar').hidden = true; return Promise.resolve(); }
+    state.canEdit = canEdit && !!(C.APP_KEY || t.__mockWrite);
+    if (t.__mockWrite) { state.canWrite = canEdit && !t.__mockNoAuth; if (state.canWrite) loadTemplates(); $('authBar').hidden = true; return Promise.resolve(); }
     if (!C.APP_KEY) {
       state.canWrite = false;
       $('authBar').hidden = false;
@@ -565,6 +689,7 @@
     }).then(function (ok) {
       state.canWrite = !!ok;
       bar.hidden = !!ok;
+      if (ok) loadTemplates();
       $('authBtn').hidden = false;
       msg.textContent = 'Modo solo lectura. Autoriza para cambiar fechas arrastrando tarjetas.';
     }).catch(function (err) {

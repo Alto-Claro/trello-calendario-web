@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calendario</title>
-  <link rel="stylesheet" href="./css/calendar.css?v=1794322807">
+  <link rel="stylesheet" href="./css/calendar.css?v=1794330521">
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 </head>
 <body>
@@ -53,11 +53,37 @@
     </aside>
   </main>
 
+  <div id="dlg" class="dlg-wrap" hidden>
+    <div class="dlg" role="dialog" aria-modal="true">
+      <div id="dlgAuth" hidden>
+        <h2>Autoriza el calendario</h2>
+        <p id="authMsg" class="hint"></p>
+        <p class="hint">Se abrirá una ventana de Trello. Solo hay que hacerlo una vez por persona.</p>
+        <div class="dlg-actions">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="button" id="dlgAuthBtn" class="btn primary">Autorizar</button>
+        </div>
+      </div>
+      <form id="nForm" hidden>
+        <h2 id="nTitle">Nueva tarjeta</h2>
+        <label class="fld">Nombre<input id="nName" type="text" autocomplete="off"></label>
+        <label class="fld">Lista<select id="nList"></select></label>
+        <div id="nTplRow"><label class="fld">Plantilla<select id="nTpl"></select></label>
+          <p id="nTplHint" class="hint"></p></div>
+        <label class="fld" id="nTimeRow">Hora<input id="nTime" type="time"></label>
+        <div class="dlg-actions">
+          <button type="button" class="btn" data-close>Cancelar</button>
+          <button type="submit" id="nCreate" class="btn primary">Crear tarjeta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
-  <script src="./js/config.js?v=1794322807"></script>
-  <script src="./js/shared.js?v=1794322807"></script>
-  <script src="./js/mock.js?v=1794322807"></script>
-  <script src="./js/calendar.js?v=1794322807"></script>
+  <script src="./js/config.js?v=1794330521"></script>
+  <script src="./js/shared.js?v=1794330521"></script>
+  <script src="./js/mock.js?v=1794330521"></script>
+  <script src="./js/calendar.js?v=1794330521"></script>
 </body>
 </html>

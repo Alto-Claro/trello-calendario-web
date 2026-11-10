@@ -58,8 +58,12 @@
       card('Optimizar fichas de producto', 'L1', iso(20, 9), iso(15), ['l4'], ['m2']),
       card('Idea: podcast de la agencia', 'L1', null, null, ['l1'], []),
       card('Actualizar portfolio', 'L1', null, null, ['l3'], ['m3']),
-      card('Renovar dominio', 'L1', null, null, ['l2'], [])
+      card('Renovar dominio', 'L1', null, null, ['l2'], []),
+      card('Plantilla: Post para redes', 'L1', null, null, ['l5'], []),
+      card('Plantilla: Informe mensual cliente', 'L3', null, null, ['l1'], [])
     ];
+    cards[cards.length - 1].isTemplate = true;
+    cards[cards.length - 2].isTemplate = true;
     var store = {};
     var renderFn = null;
 
@@ -87,11 +91,30 @@
       },
       render: function (fn) { renderFn = fn; fn(); },
       closePopup: function () { return Promise.resolve(); },
+      __mockNoAuth: /[?&]noauth=1/.test(location.search),
+      getRestApi: function () {
+        return { authorize: function () { t.__mockNoAuth = false; return Promise.resolve('demo'); },
+                 isAuthorized: function () { return Promise.resolve(!t.__mockNoAuth); } };
+      },
       sizeTo: function () { return Promise.resolve(); },
       // Simula la REST API de Trello (PUT /cards/:id y /cards/:id/customField/:id/item)
-      __mockWrite: function (path, body) {
+      __mockWrite: function (path, body, method) {
         return new Promise(function (resolve) {
           setTimeout(function () {
+            if (method === 'GET' && /^\/boards\/[^/]+\/cards/.test(path)) {
+              return resolve(cards.map(function (c) { return { id: c.id, name: c.name, idList: c.idList, isTemplate: !!c.isTemplate }; }));
+            }
+            if (method === 'POST' && path === '/cards') {
+              var src = body.idCardSource && cards.filter(function (x) { return x.id === body.idCardSource; })[0];
+              n++;
+              var nc = {
+                id: 'c' + n, name: body.name, idList: body.idList, due: body.due || null, start: body.start || null,
+                dueComplete: false, closed: false, url: 'https://trello.com/c/demo' + n, shortLink: 'demo' + n,
+                labels: src ? src.labels : [], members: src ? src.members : [], customFieldItems: []
+              };
+              cards.push(nc);
+              return resolve(nc);
+            }
             var m = path.match(/^\/cards\/([^/]+)(?:\/customField\/([^/]+)\/item)?$/);
             var c = m && cards.filter(function (x) { return x.id === m[1]; })[0];
             if (c && m[2]) {
