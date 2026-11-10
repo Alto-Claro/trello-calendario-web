@@ -544,7 +544,7 @@
 
   // ───────────────────────── Carga de datos ─────────────────────────
   function checkAuth() {
-    var canEdit = !t.memberCanWriteToModel || t.memberCanWriteToModel('card');
+    var canEdit = !t.memberCanWriteToModel || t.memberCanWriteToModel('board');
     if (t.__mockWrite) { state.canWrite = canEdit; $('authBar').hidden = true; return Promise.resolve(); }
     if (!C.APP_KEY) {
       state.canWrite = false;
