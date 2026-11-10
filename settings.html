@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    body { padding: 4px; font-size: 14px; }
+    label { display: block; font-weight: 600; margin: 10px 0 4px; }
+    select, input[type=number] { width: 100%; margin: 0; }
+    .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-weight: 400; }
+    .row input { margin: 0; }
+    .hint { color: #5e6c84; font-size: 12px; margin-top: 4px; }
+    button { width: 100%; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <form id="f">
+    <label for="dateSource">Fecha que se muestra</label>
+    <select id="dateSource"></select>
+    <div class="hint">“Rango” pinta la tarjeta desde la fecha de inicio hasta el vencimiento.</div>
+
+    <label for="colorBy">Colorear tarjetas por</label>
+    <select id="colorBy">
+      <option value="label">Primera etiqueta</option>
+      <option value="list">Lista</option>
+      <option value="member">Primer miembro</option>
+      <option value="status">Estado (vencida / completada / pendiente)</option>
+      <option value="none">Sin color</option>
+    </select>
+
+    <label for="defaultView">Vista por defecto</label>
+    <select id="defaultView">
+      <option value="month">Mes</option>
+      <option value="week">Semana</option>
+      <option value="agenda">Agenda</option>
+    </select>
+
+    <label for="weekStart">La semana empieza en</label>
+    <select id="weekStart">
+      <option value="1">Lunes</option>
+      <option value="0">Domingo</option>
+    </select>
+
+    <label for="defaultHour">Hora al programar una tarjeta sin hora</label>
+    <input id="defaultHour" type="number" min="0" max="23">
+
+    <label for="agendaDays">Días que muestra la agenda</label>
+    <input id="agendaDays" type="number" min="7" max="365">
+
+    <label class="row"><input id="showWeekends" type="checkbox"> Mostrar fines de semana</label>
+    <label class="row"><input id="showCompleted" type="checkbox"> Mostrar tarjetas completadas</label>
+
+    <button type="submit" class="mod-primary">Guardar</button>
+  </form>
+
+  <script src="./js/config.js"></script>
+  <script src="./js/shared.js"></script>
+  <script src="./js/mock.js"></script>
+  <script>
+    (function () {
+      var t = CalShared.getT();
+      var $ = function (id) { return document.getElementById(id); };
+      var NUM = ['weekStart', 'defaultHour', 'agendaDays'];
+      var BOOL = ['showWeekends', 'showCompleted'];
+      var SEL = ['dateSource', 'colorBy', 'defaultView', 'weekStart'];
+
+      Promise.all([
+        t.get('board', 'shared', 'cfg'),
+        t.board('customFields').catch(function () { return { customFields: [] }; })
+      ]).then(function (r) {
+        var cfg = CalShared.mergeCfg(r[0]);
+        var opts = [['due', 'Vencimiento'], ['start', 'Fecha de inicio'], ['range', 'Rango inicio → vencimiento']];
+        (r[1].customFields || []).forEach(function (cf) {
+          if (cf.type === 'date') opts.push(['cf:' + cf.id, 'Campo personalizado: ' + cf.name]);
+        });
+        $('dateSource').innerHTML = opts.map(function (o) {
+          return '<option value="' + o[0] + '">' + o[1].replace(/</g, '&lt;') + '</option>';
+        }).join('');
+
+        SEL.forEach(function (k) { $(k).value = String(cfg[k]); });
+        NUM.forEach(function (k) { if ($(k).type === 'number') $(k).value = cfg[k]; });
+        BOOL.forEach(function (k) { $(k).checked = !!cfg[k]; });
+
+        if (!t.memberCanWriteToModel || !t.memberCanWriteToModel('board')) {
+          document.querySelector('button').disabled = true;
+          document.querySelector('button').textContent = 'Solo los miembros con permiso de edición pueden guardar';
+        }
+        if (t.sizeTo) t.sizeTo('#f');
+      });
+
+      $('f').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var cfg = {
+          dateSource: $('dateSource').value,
+          colorBy: $('colorBy').value,
+          defaultView: $('defaultView').value,
+          weekStart: parseInt($('weekStart').value, 10),
+          defaultHour: Math.min(23, Math.max(0, parseInt($('defaultHour').value, 10) || 9)),
+          agendaDays: Math.min(365, Math.max(7, parseInt($('agendaDays').value, 10) || 30)),
+          showWeekends: $('showWeekends').checked,
+          showCompleted: $('showCompleted').checked
+        };
+        t.set('board', 'shared', 'cfg', cfg).then(function () { return t.closePopup(); });
+      });
+    })();
+  </script>
+</body>
+</html>

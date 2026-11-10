@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>body{padding:8px 4px;font-size:14px}p{margin:0 0 12px}</style>
+</head>
+<body>
+  <p>Autoriza al calendario para poder <strong>cambiar fechas arrastrando tarjetas</strong>. Solo se usa para actualizar fechas de vencimiento, inicio y campos de fecha.</p>
+  <button id="go" class="mod-primary" style="width:100%">Autorizar</button>
+  <script src="./js/config.js"></script>
+  <script>
+    var C = window.CAL_CONFIG;
+    var t = window.TrelloPowerUp.iframe({ appKey: C.APP_KEY, appName: C.APP_NAME, appAuthor: C.APP_AUTHOR });
+    document.getElementById('go').addEventListener('click', function () {
+      t.getRestApi()
+        .authorize({ scope: 'read,write', expiration: 'never' })
+        .then(function () { return t.closePopup(); })
+        .catch(function () { t.alert({ message: 'No se completó la autorización', display: 'error' }); });
+    });
+  </script>
+</body>
+</html>

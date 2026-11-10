@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calendario</title>
+  <link rel="stylesheet" href="./css/calendar.css">
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="nav">
+      <button id="today" class="btn">Hoy</button>
+      <button id="prev" class="btn icon" aria-label="Anterior">‹</button>
+      <button id="next" class="btn icon" aria-label="Siguiente">›</button>
+      <h1 id="title"></h1>
+    </div>
+    <div class="views" role="tablist">
+      <button class="btn seg" data-view="month">Mes</button>
+      <button class="btn seg" data-view="week">Semana</button>
+      <button class="btn seg" data-view="agenda">Agenda</button>
+    </div>
+    <div class="tools">
+      <input id="q" type="search" placeholder="Buscar tarjetas…" aria-label="Buscar">
+      <select id="source" aria-label="Fecha que se muestra"></select>
+      <button id="filtersBtn" class="btn">Filtros <span id="fcount" class="pill" hidden></span></button>
+      <button id="unschedBtn" class="btn">Sin fecha <span id="ucount" class="pill"></span></button>
+      <button id="icsBtn" class="btn" title="Descargar los eventos visibles como .ics">.ics</button>
+      <button id="refresh" class="btn icon" aria-label="Recargar" title="Recargar">⟳</button>
+    </div>
+  </header>
+
+  <div id="authBar" class="authbar" hidden>
+    <span>Modo solo lectura. Autoriza para cambiar fechas arrastrando tarjetas.</span>
+    <button id="authBtn" class="btn primary">Autorizar</button>
+  </div>
+
+  <main class="layout">
+    <section id="cal" class="cal" aria-live="polite"></section>
+    <aside id="unsched" class="side" hidden>
+      <h2>Sin fecha</h2>
+      <p class="hint" id="unschedHint">Arrastra una tarjeta a un día para programarla.</p>
+      <div id="unschedList"></div>
+    </aside>
+    <aside id="filters" class="side" hidden>
+      <h2>Filtros</h2>
+      <label class="chk"><input type="checkbox" id="fCompleted"> Mostrar completadas</label>
+      <label class="chk"><input type="checkbox" id="fWeekends"> Mostrar fines de semana</label>
+      <h3>Listas</h3><div id="fLists" class="flist"></div>
+      <h3>Etiquetas</h3><div id="fLabels" class="flist"></div>
+      <h3>Miembros</h3><div id="fMembers" class="flist"></div>
+      <button id="fClear" class="btn">Quitar filtros</button>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="./js/config.js"></script>
+  <script src="./js/shared.js"></script>
+  <script src="./js/mock.js"></script>
+  <script src="./js/calendar.js"></script>
+</body>
+</html>
