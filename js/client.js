@@ -9,7 +9,7 @@
 
   function openCalendar(t) {
     return t.modal({
-      url: './calendar.html',
+      url: './calendar.html?t=' + Date.now(),
       fullscreen: true,
       title: 'Calendario',
       accentColor: '#0c66e4'
@@ -27,7 +27,7 @@
     },
 
     'show-settings': function (t) {
-      return t.popup({ title: 'Ajustes del calendario', url: './settings.html', height: 520 });
+      return t.popup({ title: 'Ajustes del calendario', url: './settings.html?t=' + Date.now(), height: 520 });
     }
   };
 
@@ -37,7 +37,7 @@
       return t.getRestApi().isAuthorized().then(function (ok) { return { authorized: ok }; });
     };
     capabilities['show-authorization'] = function (t) {
-      return t.popup({ title: 'Autorizar edición', url: './authorize.html', height: 160 });
+      return t.popup({ title: 'Autorizar edición', url: './authorize.html?t=' + Date.now(), height: 160 });
     };
   }
 
