@@ -554,10 +554,23 @@
       $('authBtn').hidden = true;
       return Promise.resolve();
     }
-    return t.getRestApi().isAuthorized().then(function (ok) {
-      state.canWrite = ok && canEdit;
-      $('authBar').hidden = ok || !canEdit;
-    }).catch(function () { state.canWrite = false; });
+    var bar = $('authBar'), msg = bar.querySelector('span');
+    if (!canEdit) {
+      state.canWrite = false; bar.hidden = false; $('authBtn').hidden = true;
+      msg.textContent = 'Modo solo lectura: no tienes permiso de edición en este tablero.';
+      return Promise.resolve();
+    }
+    return Promise.resolve().then(function () {
+      return t.getRestApi().isAuthorized();
+    }).then(function (ok) {
+      state.canWrite = !!ok;
+      bar.hidden = !!ok;
+      $('authBtn').hidden = false;
+      msg.textContent = 'Modo solo lectura. Autoriza para cambiar fechas arrastrando tarjetas.';
+    }).catch(function (err) {
+      state.canWrite = false; bar.hidden = false; $('authBtn').hidden = false;
+      msg.textContent = 'Autoriza para cambiar fechas arrastrando tarjetas. (' + (err && err.message || err) + ')';
+    });
   }
 
   var loading = null;
