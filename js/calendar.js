@@ -563,7 +563,7 @@
       else reschedule(card, tg.getAttribute('data-date'), drag.from);
     });
 
-    $('authBtn').onclick = doAuthorize;
+    $('authBtn').onclick = function () { askAuth('Autoriza una vez el calendario para mover y crear tarjetas.'); };
     bindDialog();
   }
 
