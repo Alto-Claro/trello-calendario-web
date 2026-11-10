@@ -330,10 +330,36 @@
   }
 
   // ───────────────────────── Escritura en Trello ─────────────────────────
+  // Token: el de t.getRestApi() (ventana de Trello) o el pegado a mano (guardado en privado por miembro).
+  function getToken() {
+    return Promise.resolve().then(function () { return t.getRestApi().getToken(); })
+      .catch(function () { return null; })
+      .then(function (tok) { return tok || t.get('member', 'private', 'apiTok'); });
+  }
+  function authUrl() {
+    return 'https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token' +
+      '&name=' + encodeURIComponent(C.APP_NAME || 'Calendario') + '&key=' + encodeURIComponent(C.APP_KEY);
+  }
+  function saveManualToken() {
+    var tok = ($('tokIn').value || '').trim().replace(/^.*token=/, '');
+    if (!/^[A-Za-z0-9]{32,}$/.test(tok)) { toast('Ese código no parece válido. Copia el texto completo que muestra Trello.', true); return; }
+    $('tokSave').disabled = true;
+    fetch('https://api.trello.com/1/members/me?fields=username&key=' + encodeURIComponent(C.APP_KEY) + '&token=' + encodeURIComponent(tok))
+      .then(function (r) { if (!r.ok) throw new Error('Trello rechazó el código (HTTP ' + r.status + ')'); return r.json(); })
+      .then(function () { return t.set('member', 'private', 'apiTok', tok); })
+      .then(function () { return checkAuth(); })
+      .then(function () {
+        var after = pendingNew; pendingNew = null;
+        closeDialog(); render(); toast('Autorizado: ya puedes mover y crear tarjetas');
+        if (after) openNew(after);
+      })
+      .catch(function (err) { toast(err && err.message ? err.message : String(err), true); })
+      .then(function () { $('tokSave').disabled = false; });
+  }
   function apiPut(path, body) { return apiRequest('PUT', path, body); }
   function apiRequest(method, path, body) {
     if (t.__mockWrite) return t.__mockWrite(path, body, method);
-    return t.getRestApi().getToken().then(function (token) {
+    return getToken().then(function (token) {
       if (!token) throw new Error('No autorizado');
       var url = 'https://api.trello.com/1' + path + (path.indexOf('?') === -1 ? '?' : '&') +
         'key=' + encodeURIComponent(C.APP_KEY) + '&token=' + encodeURIComponent(token);
@@ -556,6 +582,8 @@
       .then(function () { return checkAuth(); })
       .then(function () { closeDialog(); render(); toast('Autorizado: ya puedes mover y crear tarjetas'); return true; })
       .catch(function (err) {
+        if ($('dlg').hidden) askAuth('No se pudo abrir la ventana de Trello. Usa la opción de abajo.');
+        $('manualAuth').open = true;
         toast('No se completó la autorización' + (err && err.message ? ': ' + err.message : '') +
           '. Si no se abrió ninguna ventana, permite las ventanas emergentes para trello.com.', true);
         return false;
@@ -566,6 +594,7 @@
     pendingNew = after || null;
     showDialog('auth');
     $('authMsg').textContent = msg;
+    $('tokLink').href = authUrl(); $('tokIn').value = '';
   }
 
   // ───────────────────────── Plantillas ─────────────────────────
@@ -655,6 +684,8 @@
   function bindDialog() {
     $('dlg').addEventListener('click', function (e) { if (e.target.id === 'dlg') closeDialog(); });
     document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = closeDialog; });
+    $('tokLink').onclick = function () { $('tokLink').href = authUrl(); };
+    $('tokSave').onclick = saveManualToken;
     $('dlgAuthBtn').onclick = function () {
       var after = pendingNew; pendingNew = null;
       doAuthorize().then(function (ok) { if (ok && after) openNew(after); });
@@ -685,7 +716,8 @@
       return Promise.resolve();
     }
     return Promise.resolve().then(function () {
-      return t.getRestApi().isAuthorized();
+      return Promise.resolve(t.getRestApi().isAuthorized()).catch(function () { return false; })
+        .then(function (ok) { return ok || t.get('member', 'private', 'apiTok').then(function (x) { return !!x; }); });
     }).then(function (ok) {
       state.canWrite = !!ok;
       bar.hidden = !!ok;

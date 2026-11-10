@@ -181,3 +181,9 @@ input[type=search] { width: 180px; }
 #nTplHint:empty { display: none; }
 #nTplHint { margin-top: -6px; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.manual { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 13px; }
+.manual summary { cursor: pointer; color: var(--accent); }
+.manual ol { padding-left: 18px; margin: 10px 0; }
+.manual a { color: var(--accent); }
+.tokrow { display: flex; gap: 6px; }
+.tokrow input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; padding: 6px 8px; font: 13px ui-monospace, monospace; }

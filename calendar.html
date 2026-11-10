@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calendario</title>
-  <link rel="stylesheet" href="./css/calendar.css?v=1794330521">
+  <link rel="stylesheet" href="./css/calendar.css?v=1794330705">
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 </head>
 <body>
@@ -63,6 +63,15 @@
           <button type="button" class="btn" data-close>Cancelar</button>
           <button type="button" id="dlgAuthBtn" class="btn primary">Autorizar</button>
         </div>
+        <details id="manualAuth" class="manual">
+          <summary>¿No se abre la ventana? Autoriza con un código</summary>
+          <ol class="hint">
+            <li><a id="tokLink" href="#" target="_blank" rel="noopener">Abre esta página de Trello</a> y pulsa <strong>Permitir</strong>.</li>
+            <li>Copia el código que aparece y pégalo aquí:</li>
+          </ol>
+          <div class="tokrow"><input id="tokIn" type="text" placeholder="Pega el código" autocomplete="off" spellcheck="false">
+            <button type="button" id="tokSave" class="btn primary">Guardar</button></div>
+        </details>
       </div>
       <form id="nForm" hidden>
         <h2 id="nTitle">Nueva tarjeta</h2>
@@ -81,9 +90,9 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="./js/config.js?v=1794330521"></script>
-  <script src="./js/shared.js?v=1794330521"></script>
-  <script src="./js/mock.js?v=1794330521"></script>
-  <script src="./js/calendar.js?v=1794330521"></script>
+  <script src="./js/config.js?v=1794330705"></script>
+  <script src="./js/shared.js?v=1794330705"></script>
+  <script src="./js/mock.js?v=1794330705"></script>
+  <script src="./js/calendar.js?v=1794330705"></script>
 </body>
 </html>
