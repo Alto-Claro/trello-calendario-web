@@ -227,6 +227,22 @@
     if (w && card.due) h += '<button class="btn" data-act="toggle-done">' + (card.dueComplete ? '↺ Marcar pendiente' : '✓ Marcar completada') + '</button>';
     h += '<button class="btn" data-act="trello">Abrir en Trello ↗</button>';
     h += '<button class="btn" data-act="copy">Copiar enlace</button>';
+    if (attachments.length) {
+      h += '<div class="cv-side-att"><div class="cv-h">Adjuntos · ' + attachments.length + '</div>' +
+        attachments.map(function (a) {
+          var k = kindOf(a), ext = ((a.name || a.url || '').match(/\.([a-z0-9]{1,5})(\?|$)/i) || [, ''])[1].toUpperCase();
+          var ico = k === 'image'
+            ? '<span class="cv-sa-ico img"><img data-media="' + esc(a.id) + '" data-size="thumb" alt=""></span>'
+            : '<span class="cv-sa-ico">' + (k === 'video' ? '▶' : esc(ext || 'FILE')) + '</span>';
+          var open = k === 'image' ? ' data-act="lightbox" data-att="' + esc(a.id) + '"' : (k === 'video' ? ' data-act="play-side" data-att="' + esc(a.id) + '"' : '');
+          var nameEl = open
+            ? '<button class="cv-sa-name"' + open + ' title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</button>'
+            : '<a class="cv-sa-name" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</a>';
+          return '<div class="cv-sa">' + ico + '<div class="cv-sa-txt">' + nameEl +
+            '<span class="cv-muted">' + (a.bytes ? fmtBytes(a.bytes) : (a.isUpload === false ? 'Enlace' : '')) + '</span></div>' +
+            '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a></div>';
+        }).join('') + '</div>';
+    }
     h += '</aside></div>';
 
     root.querySelector('.cv').innerHTML = h;
@@ -245,6 +261,8 @@
     if (mt.indexOf('video/') === 0 || (!mt && VID_EXT.test(nm)) || (mt === 'application/octet-stream' && VID_EXT.test(nm))) return 'video';
     return 'file';
   }
+  // Enlace de descarga: los adjuntos subidos a Trello se descargan con tu sesión de Trello.
+  function dlUrl(a) { return a.url; }
   function fmtBytes(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
   function bestPreview(a, minW) {
     var p = (a.previews || []).filter(function (x) { return x.url; }).sort(function (x, y) { return x.width - y.width; });
@@ -378,6 +396,10 @@
       else if (act === 'copy') copyLink();
       else if (act === 'lightbox') openLightbox(b.getAttribute('data-att'));
       else if (act === 'play') playVideo(b.getAttribute('data-att'));
+      else if (act === 'play-side') {
+        var vid = root.querySelector('[data-vid="' + b.getAttribute('data-att') + '"]');
+        if (vid) { vid.scrollIntoView({ behavior: 'smooth', block: 'center' }); playVideo(b.getAttribute('data-att')); }
+      }
       else if (act === 'pick-members' || act === 'pick-labels') {
         var p = $('[data-picker="' + act.slice(5) + '"]');
         if (p) p.hidden = !p.hidden;
