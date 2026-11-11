@@ -7,6 +7,8 @@
   var ICON_DARK = BASE + 'img/icon-white.svg';  // icono claro para fondos oscuros
   var ICON_LIGHT = BASE + 'img/icon.svg';       // icono oscuro para fondos claros
 
+  function todayIcon() { return BASE + 'img/day/' + new Date().getDate() + '.svg?v=2'; }
+
   function openCalendar(t) {
     return t.modal({
       url: './calendar.html?t=' + Date.now(),
@@ -19,7 +21,8 @@
   var capabilities = {
     'board-buttons': function () {
       return [{
-        icon: { dark: ICON_DARK, light: ICON_LIGHT },
+        // Icono a color con la fecha de hoy (sirve igual sobre fondo claro u oscuro).
+        icon: { dark: todayIcon(), light: todayIcon() },
         text: 'Calendario',
         condition: 'always',
         callback: openCalendar
