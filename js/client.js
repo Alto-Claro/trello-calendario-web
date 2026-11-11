@@ -7,7 +7,7 @@
   var ICON_DARK = BASE + 'img/icon-white.svg';  // icono claro para fondos oscuros
   var ICON_LIGHT = BASE + 'img/icon.svg';       // icono oscuro para fondos claros
 
-  function todayIcon() { return BASE + 'img/day/' + new Date().getDate() + '.svg?v=3'; }
+  function todayIcon() { return BASE + 'img/day/' + new Date().getDate() + '.svg?v=4'; }
 
   function openCalendar(t) {
     return t.modal({
