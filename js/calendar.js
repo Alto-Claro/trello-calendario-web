@@ -64,6 +64,21 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.hidden = true; }, 3500);
   }
   function detailOn() { return state.prefs.detail !== false; }
+  function thumbsOn() { return state.prefs.thumbs !== false; }
+  // Miniatura: la portada de la tarjeta o, si no hay, la primera imagen adjunta (vista previa pequeña).
+  var IMG_RE = /\.(png|jpe?g|gif|webp|bmp|avif|heic)(\?|$)/i;
+  function thumbFor(card) {
+    var atts = card.attachments || [];
+    if (!atts.length) return null;
+    var isImg = function (a) { return /^image\//.test(a.mimeType || '') || IMG_RE.test(a.name || a.url || ''); };
+    var cov = card.cover && card.cover.idAttachment && atts.filter(function (a) { return a.id === card.cover.idAttachment; })[0];
+    var a = cov || atts.filter(isImg)[0];
+    if (!a) return null;
+    var prev = (a.previews || []).filter(function (p) { return p.url; }).sort(function (x, y) { return x.width - y.width; });
+    var p = prev.filter(function (x) { return x.width >= 240; })[0] || prev[prev.length - 1];
+    if (p) return p.url;
+    return isImg(a) ? a.url : null;
+  }
   function source() { return state.prefs.source || state.cfg.dateSource; }
   function showCompleted() { return state.prefs.completed != null ? state.prefs.completed : state.cfg.showCompleted; }
   function showWeekends() { return state.prefs.weekends != null ? state.prefs.weekends : state.cfg.showWeekends; }
@@ -177,7 +192,10 @@
         var bg = S.labelColor(l.color);
         return '<span class="lb' + (l.name ? '' : ' empty') + '" style="background:' + bg + ';color:' + S.textOn(bg) + '">' + esc(l.name || '') + '</span>';
       }).join('');
+      var th = thumbsOn() ? thumbFor(card) : null, coverCol = card.cover && card.cover.color && !th;
       return '<div class="' + cls.join(' ') + '"' + style + attrs + '>' +
+        (th ? '<div class="ev-thumb"><img src="' + esc(th) + '" alt="" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.remove()"></div>' : '') +
+        (coverCol ? '<div class="ev-covercol" style="background:' + S.labelColor(card.cover.color) + '"></div>' : '') +
         (labels ? '<div class="ev-labels">' + labels + '</div>' : '') +
         '<div class="ev-line">' + time + '<span class="name">' + esc(card.name) + '</span></div>' +
         '<div class="ev-foot">' + (listObj ? '<span class="ev-list" style="--lc:' + S.hashColor(listObj.id) + '">' + esc(listObj.name) + '</span>' : '') + av + '</div>' +
@@ -307,6 +325,7 @@
     var p = state.prefs;
     $('fCompleted').checked = showCompleted();
     $('fWeekends').checked = showWeekends();
+    $('fThumbs').checked = thumbsOn();
     $('fLists').innerHTML = state.lists.map(function (l) {
       return '<label class="chk"><input type="checkbox" data-f="list" value="' + esc(l.id) + '"' +
         (p.hiddenLists.indexOf(l.id) === -1 ? ' checked' : '') + '>' +
@@ -525,6 +544,7 @@
       var el = e.target, p = state.prefs;
       if (el.id === 'fCompleted') p.completed = el.checked;
       else if (el.id === 'fWeekends') p.weekends = el.checked;
+      else if (el.id === 'fThumbs') p.thumbs = el.checked;
       else {
         var f = el.getAttribute('data-f'), v = el.value;
         var arr = f === 'list' ? p.hiddenLists : f === 'label' ? p.labels : p.members;

@@ -84,6 +84,11 @@
       }
     };
     cards[0].badges = { checkItems: 3, checkItemsChecked: 1, comments: 1 };
+    cards[0].attachments = extra.c1.attachments;
+    var mk = cards.filter(function (c) { return /Mockups/.test(c.name); })[0];
+    if (mk) mk.attachments = [{ id: 'a9', name: 'mockup.svg', url: './img/demo/foto3.svg', mimeType: 'image/svg+xml' }];
+    var fp = cards.filter(function (c) { return /Fotos producto/.test(c.name); })[0];
+    if (fp) { fp.attachments = [{ id: 'a8', name: 'fotos.svg', url: './img/demo/foto2.svg', mimeType: 'image/svg+xml' }]; fp.cover = { idAttachment: 'a8' }; }
     cards[cards.length - 2].isTemplate = true;
     var store = {};
     var renderFn = null;
