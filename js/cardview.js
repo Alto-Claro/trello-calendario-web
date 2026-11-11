@@ -270,18 +270,30 @@
     var list = (full && full.attachments) || (card && card.attachments) || [];
     return list.filter(function (a) { return a.id === id; })[0];
   }
+  // Carga un <img>/<video>: 1) la URL de Trello tal cual (usa tu sesión de Trello, como hace Trello),
+  // 2) si falla y es un adjunto subido, descarga con el token. Llama a onFail si nada funciona.
+  var directOk = {};
+  function loadInto(el, a, size, onOk, onFail) {
+    var url = urlFor(a, size), triedToken = false;
+    function tryToken() {
+      if (triedToken || a.isUpload === false || !ctx.canWrite()) { onFail(); return; }
+      triedToken = true;
+      resolveMedia(a, size).then(function (src) { el.src = src; }).catch(function () { onFail(); });
+    }
+    el.onerror = function () { if (!triedToken) tryToken(); else onFail(); };
+    el.onload = el.onloadeddata = function () { directOk[url] = true; onOk && onOk(); };
+    el.src = mediaCacheSync[url] || url;
+  }
+  var mediaCacheSync = {};
   function hydrateMedia(attachments) {
     root.querySelectorAll('img[data-media]').forEach(function (img) {
       var a = attById(img.getAttribute('data-media'));
       if (!a) return;
-      var size = img.getAttribute('data-size');
-      if (a.isUpload !== false && !ctx.canWrite()) { mediaFail(img, a, true); return; }
-      img.parentNode.classList.add('loading');
-      resolveMedia(a, size).then(function (src) {
-        img.src = src;
-        img.onload = function () { img.parentNode && img.parentNode.classList.remove('loading'); };
-        img.onerror = function () { mediaFail(img, a); };
-      }).catch(function () { mediaFail(img, a); });
+      var box = img.parentNode;
+      box.classList.add('loading');
+      loadInto(img, a, img.getAttribute('data-size'),
+        function () { box.classList.remove('loading'); },
+        function () { mediaFail(img, a, a.isUpload !== false && !ctx.canWrite()); });
     });
   }
   function mediaFail(img, a, needAuth) {
@@ -300,17 +312,15 @@
   function playVideo(id) {
     var a = attById(id), box = root.querySelector('[data-vid="' + id + '"]');
     if (!a || !box) return;
-    if (a.isUpload !== false && !needWrite()) return;
     var btn = box.querySelector('.cv-play');
-    btn.classList.add('loading'); btn.disabled = true;
-    resolveMedia(a, 'full').then(function (src) {
-      var v = document.createElement('video');
-      v.controls = true; v.autoplay = true; v.playsInline = true; v.src = src; v.className = 'cv-video';
-      v.onerror = function () { ctx.toast('No se pudo reproducir este vídeo aquí. Ábrelo desde el enlace.', true); };
-      btn.replaceWith(v);
-    }).catch(function (err) {
-      btn.classList.remove('loading'); btn.disabled = false;
-      ctx.toast('No se pudo cargar el vídeo' + (err && err.message ? ': ' + err.message : ''), true);
+    var v = document.createElement('video');
+    v.controls = true; v.autoplay = true; v.playsInline = true; v.preload = 'metadata'; v.className = 'cv-video';
+    btn.replaceWith(v);
+    loadInto(v, a, 'full', null, function () {
+      var p = document.createElement('div');
+      p.className = 'cv-miss';
+      p.innerHTML = 'No se pudo reproducir aquí. <a href="' + esc(a.url) + '" target="_blank" rel="noopener">Abrir el vídeo</a>';
+      v.replaceWith(p);
     });
   }
 
@@ -348,9 +358,10 @@
     cap.innerHTML = esc(a.name) + (lbList.length > 1 ? ' · ' + (lbIdx + 1) + '/' + lbList.length : '') +
       ' · <a href="' + esc(a.url) + '" target="_blank" rel="noopener">Abrir original</a>';
     img.removeAttribute('src'); lb.classList.add('loading');
-    resolveMedia(a, 'cover').then(function (src) { if (lbList[lbIdx] === a) img.src = src; });
-    resolveMedia(a, 'full').then(function (src) { if (lbList[lbIdx] === a) img.src = src; })
-      .catch(function () {}).then(function () { lb.classList.remove('loading'); });
+    loadInto(img, a, 'full', function () { lb.classList.remove('loading'); }, function () {
+      lb.classList.remove('loading');
+      cap.innerHTML = esc(a.name) + ' · No se pudo mostrar · <a href="' + esc(a.url) + '" target="_blank" rel="noopener">Abrir original</a>';
+    });
   }
   function closeLightbox() { if (lb) lb.hidden = true; }
 
