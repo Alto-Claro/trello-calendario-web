@@ -63,6 +63,18 @@
       card('Plantilla: Informe mensual cliente', 'L3', null, null, ['l1'], [])
     ];
     cards[cards.length - 1].isTemplate = true;
+    cards[0].desc = 'Preparar la **reunión de kickoff** con el cliente.\nAgenda: https://ejemplo.com/agenda';
+    var extra = {
+      c1: {
+        checklists: [{ id: 'cl1', name: 'Preparación', checkItems: [
+          { id: 'i1', name: 'Enviar convocatoria', state: 'complete', pos: 1 },
+          { id: 'i2', name: 'Preparar presentación', state: 'incomplete', pos: 2 },
+          { id: 'i3', name: 'Reservar sala', state: 'incomplete', pos: 3 }] }],
+        attachments: [{ id: 'a1', name: 'Briefing.pdf', url: 'https://ejemplo.com/briefing.pdf', date: iso(-1, 10) }],
+        actions: [{ id: 'x1', date: iso(-1, 16), data: { text: 'Confirmado con el cliente para el martes.' }, memberCreator: members[1] }]
+      }
+    };
+    cards[0].badges = { checkItems: 3, checkItemsChecked: 1, comments: 1 };
     cards[cards.length - 2].isTemplate = true;
     var store = {};
     var renderFn = null;
@@ -90,6 +102,7 @@
         return Promise.resolve();
       },
       render: function (fn) { renderFn = fn; fn(); },
+      member: function () { return Promise.resolve(members[0]); },
       closePopup: function () { return Promise.resolve(); },
       __mockNoAuth: /[?&]noauth=1/.test(location.search),
       getRestApi: function () {
@@ -114,6 +127,33 @@
               };
               cards.push(nc);
               return resolve(nc);
+            }
+            var g = path.split('?')[0], mm, cc;
+            if (method === 'GET' && (mm = g.match(/^\/cards\/([^/]+)$/))) {
+              cc = cards.filter(function (x) { return x.id === mm[1]; })[0];
+              var ex = extra[mm[1]] || {};
+              return resolve(Object.assign({}, cc, { checklists: ex.checklists || [], attachments: ex.attachments || [], actions: ex.actions || [] }));
+            }
+            if ((mm = g.match(/^\/cards\/([^/]+)\/checkItem\/([^/]+)$/))) {
+              ((extra[mm[1]] || {}).checklists || []).forEach(function (cl) { cl.checkItems.forEach(function (it) { if (it.id === mm[2]) it.state = body.state; }); });
+              return resolve({ id: mm[2], state: body.state });
+            }
+            if (method === 'POST' && (mm = g.match(/^\/checklists\/([^/]+)\/checkItems$/))) {
+              var it = { id: 'i' + Date.now(), name: body.name, state: 'incomplete', pos: 1e9 };
+              Object.keys(extra).forEach(function (k) { (extra[k].checklists || []).forEach(function (cl) { if (cl.id === mm[1]) cl.checkItems.push(it); }); });
+              return resolve(it);
+            }
+            if (method === 'POST' && (mm = g.match(/^\/cards\/([^/]+)\/actions\/comments$/))) {
+              var a = { id: 'x' + Date.now(), date: new Date().toISOString(), data: { text: body.text }, memberCreator: members[0] };
+              extra[mm[1]] = extra[mm[1]] || {}; extra[mm[1]].actions = [a].concat(extra[mm[1]].actions || []);
+              return resolve(a);
+            }
+            if ((mm = g.match(/^\/cards\/([^/]+)\/id(Labels|Members)(?:\/([^/]+))?$/))) {
+              cc = cards.filter(function (x) { return x.id === mm[1]; })[0];
+              var key = mm[2] === 'Labels' ? 'labels' : 'members', pool = mm[2] === 'Labels' ? labels : members;
+              if (method === 'POST') cc[key] = cc[key].concat(pool.filter(function (x) { return x.id === body.value; }));
+              else cc[key] = cc[key].filter(function (x) { return x.id !== mm[3]; });
+              return resolve([]);
             }
             var m = path.match(/^\/cards\/([^/]+)(?:\/customField\/([^/]+)\/item)?$/);
             var c = m && cards.filter(function (x) { return x.id === m[1]; })[0];

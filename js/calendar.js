@@ -517,7 +517,7 @@
       if (day && state.canEdit && !e.target.closest('.more') && e.target.closest('#cal')) openNew(day.getAttribute('data-date'));
     });
     document.body.addEventListener('keydown', function (e) {
-      if (e.target.matches('input, select, textarea') || !$('dlg').hidden) return;
+      if (e.target.matches('input, select, textarea') || !$('dlg').hidden || window.CalCardView.isOpen()) return;
       if (e.key === 'Enter' && e.target.classList.contains('ev')) openCard(e.target.getAttribute('data-id'));
       else if (e.key === 'ArrowLeft') move(-1);
       else if (e.key === 'ArrowRight') move(1);
@@ -569,9 +569,25 @@
 
   function openCard(id) {
     var card = state.cards.filter(function (c) { return c.id === id; })[0];
-    if (!card) return;
-    Promise.resolve(t.showCard(card.id)).catch(function () {
-      if (card.url) window.open(card.url, '_blank');
+    if (card) window.CalCardView.open(card);
+  }
+  function openInTrello(card) {
+    // Abre la tarjeta nativa de Trello (cierra el calendario).
+    Promise.resolve(t.showCard(card.id)).catch(function () { if (card.url) window.open(card.url, '_blank'); });
+  }
+  function initCardView() {
+    window.CalCardView.init({
+      api: apiRequest,
+      canWrite: function () { return state.canWrite; },
+      askAuth: function (msg) { askAuth(msg); },
+      board: function () { return state.board; },
+      lists: function () { return state.lists; },
+      me: function () { return state.me; },
+      onChange: function () { render(); },
+      openInTrello: openInTrello,
+      toast: toast,
+      labelColor: S.labelColor, textOn: S.textOn,
+      locale: state.cfg.locale, defaultHour: state.cfg.defaultHour
     });
   }
 
@@ -744,6 +760,7 @@
       checkAuth()
     ]).then(function (r) {
       state.cards = (r[0] || []).filter(function (c) { return !c.closed; });
+      window.CalCardView.sync(state.cards);
       state.lists = r[1] || [];
       state.board = r[2] || {};
       state.board.customFields = state.board.customFields || [];
@@ -769,6 +786,8 @@
   // ───────────────────────── Arranque ─────────────────────────
   $('cal').innerHTML = '<div class="loading">Cargando tarjetas…</div>';
   bindUi();
+  initCardView();
+  Promise.resolve(t.member && t.member('id', 'fullName', 'initials', 'avatar')).then(function (m) { state.me = m || null; }).catch(function () {});
   // t.render se dispara cuando cambian los datos del tablero → calendario en vivo.
   if (typeof t.render === 'function') {
     var rTimer;
