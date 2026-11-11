@@ -518,7 +518,6 @@
     $('prev').onclick = function () { move(-1); };
     $('next').onclick = function () { move(1); };
     $('refresh').onclick = function () { load().then(function () { toast('Actualizado'); }); };
-    $('icsBtn').onclick = exportIcs;
     $('detailBtn').onclick = function () {
       state.prefs.detail = !detailOn(); savePrefs(); render();
     };
