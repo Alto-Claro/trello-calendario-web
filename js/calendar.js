@@ -334,8 +334,12 @@
   function getToken() {
     return Promise.resolve().then(function () { return t.getRestApi().getToken(); })
       .catch(function () { return null; })
-      .then(function (tok) { return tok || t.get('member', 'private', 'apiTok'); });
+      .then(function (tok) { return tok || t.get('member', 'private', 'apiTok'); })
+      .then(function (tok) { return tok || lsGet(); });
   }
+  // Copia local del código: compartida por los 10 Power-Ups (mismo origen) en este navegador.
+  function lsGet() { try { return localStorage.getItem('calTok') || null; } catch (e) { return null; } }
+  function lsSet(v) { try { localStorage.setItem('calTok', v); } catch (e) { /* almacenamiento bloqueado */ } }
   function authUrl() {
     return 'https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token' +
       '&name=' + encodeURIComponent(C.APP_NAME || 'Calendario') + '&key=' + encodeURIComponent(C.APP_KEY);
@@ -346,7 +350,7 @@
     $('tokSave').disabled = true;
     fetch('https://api.trello.com/1/members/me?fields=username&key=' + encodeURIComponent(C.APP_KEY) + '&token=' + encodeURIComponent(tok))
       .then(function (r) { if (!r.ok) throw new Error('Trello rechazó el código (HTTP ' + r.status + ')'); return r.json(); })
-      .then(function () { return t.set('member', 'private', 'apiTok', tok); })
+      .then(function () { lsSet(tok); return t.set('member', 'private', 'apiTok', tok); })
       .then(function () { return checkAuth(); })
       .then(function () {
         var after = pendingNew; pendingNew = null;
@@ -733,7 +737,7 @@
     }
     return Promise.resolve().then(function () {
       return Promise.resolve(t.getRestApi().isAuthorized()).catch(function () { return false; })
-        .then(function (ok) { return ok || t.get('member', 'private', 'apiTok').then(function (x) { return !!x; }); });
+        .then(function (ok) { return ok || t.get('member', 'private', 'apiTok').then(function (x) { return !!(x || lsGet()); }); });
     }).then(function (ok) {
       state.canWrite = !!ok;
       bar.hidden = !!ok;
