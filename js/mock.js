@@ -63,6 +63,9 @@
       card('Plantilla: Informe mensual cliente', 'L3', null, null, ['l1'], [])
     ];
     cards[cards.length - 1].isTemplate = true;
+    cards[cards.length - 2].isTemplate = true;
+    cards[0].cover = { idAttachment: 'a2' };
+    lists[2].name = 'Require Edits'; lists[3].name = 'Approval';
     cards[0].desc = 'Preparar la **reunión de kickoff** con el cliente.\nAgenda: https://ejemplo.com/agenda';
     var extra = {
       c1: {
@@ -70,7 +73,13 @@
           { id: 'i1', name: 'Enviar convocatoria', state: 'complete', pos: 1 },
           { id: 'i2', name: 'Preparar presentación', state: 'incomplete', pos: 2 },
           { id: 'i3', name: 'Reservar sala', state: 'incomplete', pos: 3 }] }],
-        attachments: [{ id: 'a1', name: 'Briefing.pdf', url: 'https://ejemplo.com/briefing.pdf', date: iso(-1, 10) }],
+        attachments: [
+          { id: 'a1', name: 'Briefing.pdf', url: 'https://ejemplo.com/briefing.pdf', mimeType: 'application/pdf', isUpload: true, date: iso(-1, 10) },
+          { id: 'a2', name: 'Moodboard.svg', url: './img/demo/foto1.svg', mimeType: 'image/svg+xml', isUpload: true, bytes: 48000, date: iso(-1, 11) },
+          { id: 'a3', name: 'Sesión de fotos.svg', url: './img/demo/foto2.svg', mimeType: 'image/svg+xml', isUpload: true, bytes: 52000, date: iso(-1, 12) },
+          { id: 'a4', name: 'Producto.svg', url: './img/demo/foto3.svg', mimeType: 'image/svg+xml', isUpload: true, bytes: 51000, date: iso(-1, 12) },
+          { id: 'a5', name: 'Spot 15s.mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', mimeType: 'video/mp4', isUpload: false, bytes: 1100000, date: iso(-1, 13) }
+        ],
         actions: [{ id: 'x1', date: iso(-1, 16), data: { text: 'Confirmado con el cliente para el martes.' }, memberCreator: members[1] }]
       }
     };

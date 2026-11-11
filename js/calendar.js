@@ -63,6 +63,7 @@
     el.textContent = msg; el.className = 'toast' + (isErr ? ' err' : ''); el.hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.hidden = true; }, 3500);
   }
+  function detailOn() { return state.prefs.detail !== false; }
   function source() { return state.prefs.source || state.cfg.dateSource; }
   function showCompleted() { return state.prefs.completed != null ? state.prefs.completed : state.cfg.showCompleted; }
   function showWeekends() { return state.prefs.weekends != null ? state.prefs.weekends : state.cfg.showWeekends; }
@@ -165,10 +166,24 @@
       var list = state.listById[card.idList];
       meta = '<span class="meta">' + esc(list ? list.name : '') + '</span>';
     }
-    var tip = card.name + (state.listById[card.idList] ? ' — ' + state.listById[card.idList].name : '');
-    return '<div class="' + cls.join(' ') + '"' + style + ' tabindex="0" role="button"' +
-      ' data-id="' + esc(card.id) + '"' + (dayKey ? ' data-from="' + dayKey + '"' : '') +
-      (state.canEdit ? ' draggable="true"' : '') + ' title="' + esc(tip) + '">' +
+    var listObj = state.listById[card.idList];
+    var tip = card.name + (listObj ? ' — ' + listObj.name : '');
+    var attrs = ' tabindex="0" role="button" data-id="' + esc(card.id) + '"' + (dayKey ? ' data-from="' + dayKey + '"' : '') +
+      (state.canEdit ? ' draggable="true"' : '') + ' title="' + esc(tip) + '"';
+    var cont = ev && dayKey && dayKey !== ev.startKey;
+    if (detailOn() && !cont) {
+      cls.push('det');
+      var labels = (card.labels || []).map(function (l) {
+        var bg = S.labelColor(l.color);
+        return '<span class="lb' + (l.name ? '' : ' empty') + '" style="background:' + bg + ';color:' + S.textOn(bg) + '">' + esc(l.name || '') + '</span>';
+      }).join('');
+      return '<div class="' + cls.join(' ') + '"' + style + attrs + '>' +
+        (labels ? '<div class="ev-labels">' + labels + '</div>' : '') +
+        '<div class="ev-line">' + time + '<span class="name">' + esc(card.name) + '</span></div>' +
+        '<div class="ev-foot">' + (listObj ? '<span class="ev-list" style="--lc:' + S.hashColor(listObj.id) + '">' + esc(listObj.name) + '</span>' : '') + av + '</div>' +
+        '</div>';
+    }
+    return '<div class="' + cls.join(' ') + '"' + style + attrs + '>' +
       time + '<span class="name">' + esc(card.name) + '</span>' + meta + av + '</div>';
   }
 
@@ -281,6 +296,8 @@
     else if (state.view === 'week') renderWeek(r.idx);
     else renderAgenda(r.idx);
     renderUnscheduled(r.unscheduled);
+    $('detailBtn').classList.toggle('active', detailOn());
+    document.body.classList.toggle('detail', detailOn());
     var n = state.prefs.hiddenLists.length + state.prefs.labels.length + state.prefs.members.length;
     $('fcount').hidden = !n; $('fcount').textContent = n;
   }
@@ -361,6 +378,19 @@
       .then(function () { $('tokSave').disabled = false; });
   }
   function apiPut(path, body) { return apiRequest('PUT', path, body); }
+  // Descarga un adjunto de Trello con el token (los subidos a Trello no son públicos) y devuelve una URL local.
+  function mediaUrl(url) {
+    if (t.__mockWrite) return Promise.resolve(url);
+    return getToken().then(function (tok) {
+      if (!tok) throw new Error('No autorizado');
+      var u = url.replace(/^https:\/\/trello\.com\/1\//, 'https://api.trello.com/1/');
+      var auth = 'OAuth oauth_consumer_key="' + C.APP_KEY + '", oauth_token="' + tok + '"';
+      return fetch(u, { headers: { Authorization: auth } }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      });
+    }).then(function (b) { return URL.createObjectURL(b); });
+  }
   function apiRequest(method, path, body) {
     if (t.__mockWrite) return t.__mockWrite(path, body, method);
     return getToken().then(function (token) {
@@ -470,6 +500,9 @@
     $('next').onclick = function () { move(1); };
     $('refresh').onclick = function () { load().then(function () { toast('Actualizado'); }); };
     $('icsBtn').onclick = exportIcs;
+    $('detailBtn').onclick = function () {
+      state.prefs.detail = !detailOn(); savePrefs(); render();
+    };
     document.querySelectorAll('[data-view]').forEach(function (b) {
       b.onclick = function () { setView(b.getAttribute('data-view')); };
     });
@@ -582,6 +615,7 @@
   function initCardView() {
     window.CalCardView.init({
       api: apiRequest,
+      mediaUrl: mediaUrl,
       canWrite: function () { return state.canWrite; },
       askAuth: function (msg) { askAuth(msg); },
       board: function () { return state.board; },
