@@ -33,6 +33,10 @@
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
     h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+    h = h.replace(/(^|[\s(>])@([a-z0-9_]{2,})/gi, function (all, pre, u) {
+      var m = memberByUsername(u);
+      return pre + '<span class="cv-mention"' + (m ? ' title="' + esc(m.fullName) + '"' : '') + '>@' + u + '</span>';
+    });
     return h.replace(/\n/g, '<br>');
   }
   function avatar(m, size) {
@@ -150,7 +154,7 @@
       (w ? '<button class="btn cv-sm" data-act="edit-desc">Editar</button>' : '') + '</div>' +
       '<div class="cv-desc" data-desc>' + (card.desc ? md(card.desc) : '<span class="cv-muted">' +
         (w ? 'Añade una descripción más detallada…' : 'Sin descripción') + '</span>') + '</div>' +
-      (w ? '<div class="cv-desc-edit" hidden><textarea rows="6">' + esc(card.desc || '') + '</textarea>' +
+      (w ? '<div class="cv-desc-edit" hidden><textarea rows="6" data-mention>' + esc(card.desc || '') + '</textarea>' +
         '<div class="cv-actions"><button class="btn primary cv-sm" data-act="save-desc">Guardar</button>' +
         '<button class="btn cv-sm" data-act="cancel-desc">Cancelar</button></div></div>' : '') +
       '</section>';
@@ -205,7 +209,7 @@
     // Comentarios
     h += '<section class="cv-sec"><div class="cv-sec-h"><h3>Comentarios</h3></div>';
     if (w) {
-      h += '<form class="cv-comment"><textarea rows="2" placeholder="Escribe un comentario…"></textarea>' +
+      h += '<form class="cv-comment"><textarea rows="2" data-mention placeholder="Escribe un comentario… (@ para mencionar)"></textarea>' +
         '<button class="btn primary cv-sm">Guardar</button></form>';
     }
     if (full) {
@@ -245,6 +249,7 @@
     }
     h += '</aside></div>';
 
+    closeMention();
     root.querySelector('.cv').innerHTML = h;
     hydrateMedia(attachments);
     var ta = $('.cv-title');
@@ -383,6 +388,80 @@
   }
   function closeLightbox() { if (lb) lb.hidden = true; }
 
+  // ───────────────────────── @menciones ─────────────────────────
+  // Trello notifica a quien aparezca como @usuario en un comentario: aquí sugerimos los miembros del tablero.
+  function normTxt(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function memberByUsername(u) {
+    if (!ctx) return null;
+    u = String(u).toLowerCase();
+    return ((ctx.board() || {}).members || []).filter(function (m) { return (m.username || '').toLowerCase() === u; })[0] || null;
+  }
+  var mm = { menu: null, ta: null, start: 0, items: [], sel: 0 };
+  function mentionCandidates(q) {
+    q = normTxt(q);
+    var cardIds = (card && card.members || []).map(function (m) { return m.id; });
+    var list = ((ctx.board() || {}).members || []).filter(function (m) { return m.username; }).map(function (m) {
+      return { username: m.username, fullName: m.fullName || m.username, m: m, onCard: cardIds.indexOf(m.id) !== -1 };
+    });
+    list.sort(function (a, b) { return (b.onCard - a.onCard) || a.fullName.localeCompare(b.fullName); });
+    list = list.concat([
+      { username: 'card', fullName: 'Todos los miembros de la tarjeta', special: true },
+      { username: 'board', fullName: 'Todos los miembros del tablero', special: true }
+    ]);
+    if (!q) return list.slice(0, 8);
+    return list.filter(function (x) {
+      var words = normTxt(x.fullName).split(/\s+/);
+      return normTxt(x.username).indexOf(q) === 0 || words.some(function (w) { return w.indexOf(q) === 0; }) ||
+        normTxt(x.fullName).indexOf(q) !== -1;
+    }).slice(0, 8);
+  }
+  function closeMention() {
+    if (mm.menu) mm.menu.remove();
+    mm.menu = null; mm.ta = null; mm.items = [];
+  }
+  function updateMention(ta) {
+    var caret = ta.selectionStart;
+    if (caret !== ta.selectionEnd) { closeMention(); return; }
+    var m = ta.value.slice(0, caret).match(/(^|[\s(])@([\w.\-\u00C0-\u017F]{0,30})$/);
+    if (!m) { closeMention(); return; }
+    var items = mentionCandidates(m[2]);
+    if (!items.length) { closeMention(); return; }
+    if (mm.ta !== ta || !mm.menu) {
+      closeMention();
+      mm.menu = document.createElement('div');
+      mm.menu.className = 'cv-mmenu'; mm.menu.setAttribute('role', 'listbox');
+      mm.menu.addEventListener('mousedown', function (e) {
+        var it = e.target.closest('[data-i]');
+        if (!it) return;
+        e.preventDefault(); pickMention(+it.getAttribute('data-i'));
+      });
+      ta.parentNode.style.position = 'relative';
+      ta.parentNode.appendChild(mm.menu);
+    }
+    mm.ta = ta; mm.start = caret - m[2].length - 1; mm.items = items;
+    if (mm.sel >= items.length) mm.sel = 0;
+    mm.menu.style.top = (ta.offsetTop + ta.offsetHeight + 2) + 'px';
+    mm.menu.style.left = ta.offsetLeft + 'px';
+    renderMention();
+  }
+  function renderMention() {
+    mm.menu.innerHTML = '<div class="cv-mmenu-h">Mencionar</div>' + mm.items.map(function (x, i) {
+      var av = x.special ? '<span class="cv-av" style="width:24px;height:24px">@</span>' : avatar(x.m, 24);
+      return '<div class="cv-mitem' + (i === mm.sel ? ' sel' : '') + '" role="option" data-i="' + i + '">' + av +
+        '<span class="cv-mname">' + esc(x.fullName) + '</span><span class="cv-muser">@' + esc(x.username) + '</span></div>';
+    }).join('');
+  }
+  function pickMention(i) {
+    var x = mm.items[i], ta = mm.ta;
+    if (!x || !ta) return;
+    var caret = ta.selectionStart, ins = '@' + x.username + ' ';
+    ta.value = ta.value.slice(0, mm.start) + ins + ta.value.slice(caret);
+    var pos = mm.start + ins.length;
+    ta.setSelectionRange(pos, pos);
+    closeMention();
+    ta.focus();
+  }
+
   // ───────────────────────── Eventos ─────────────────────────
   function bind() {
     root.addEventListener('click', function (e) {
@@ -463,6 +542,21 @@
 
     // Título: guardar al salir o con Enter
     root.addEventListener('keydown', function (e) {
+      if (mm.menu && e.target === mm.ta) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          mm.sel = (mm.sel + (e.key === 'ArrowDown' ? 1 : -1) + mm.items.length) % mm.items.length;
+          renderMention(); return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mm.sel); return; }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMention(); return; }
+      }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target.closest && e.target.closest('.cv-comment')) {
+        e.preventDefault();
+        var f = e.target.closest('.cv-comment');
+        if (f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        return;
+      }
       if (e.target.classList.contains('cv-title') && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
       if (e.key === 'Escape') {
         if (lb && !lb.hidden) return;
@@ -470,7 +564,17 @@
         if (e.target.matches('textarea, input')) e.target.blur(); else close();
       }
     });
-    root.addEventListener('input', function (e) { if (e.target.classList.contains('cv-title')) autosize(e.target); });
+    root.addEventListener('input', function (e) {
+      if (e.target.classList.contains('cv-title')) autosize(e.target);
+      if (e.target.hasAttribute && e.target.hasAttribute('data-mention')) { mm.sel = mm.ta === e.target ? mm.sel : 0; updateMention(e.target); }
+    });
+    root.addEventListener('keyup', function (e) {
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') &&
+          e.target.hasAttribute && e.target.hasAttribute('data-mention')) updateMention(e.target);
+    });
+    root.addEventListener('focusout', function (e) {
+      if (mm.ta && e.target === mm.ta) setTimeout(function () { if (document.activeElement !== mm.ta) closeMention(); }, 120);
+    });
     root.addEventListener('focusout', function (e) {
       if (!e.target.classList.contains('cv-title')) return;
       var v = e.target.value.replace(/\s+/g, ' ').trim();
@@ -490,6 +594,8 @@
           full.actions = [a && a.id ? a : { id: 'tmp' + Date.now(), date: new Date().toISOString(), data: { text: txt }, memberCreator: ctx.me() || {} }]
             .concat(full.actions || []);
           paint();
+          var nt = root.querySelector('.cv-comment textarea');
+          if (nt) nt.focus();
         }).catch(function (err) { ctx.toast('No se pudo comentar: ' + (err && err.message || err), true); })
           .then(function () { setBusy(false); });
       } else if (f.classList.contains('cv-additem')) {

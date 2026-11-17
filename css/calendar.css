@@ -411,3 +411,16 @@ body.detail .events { overflow: visible; }
 }
 .cv-sa-dl:hover { background: var(--accent); color: #fff; }
 @media (max-width: 640px) { .cv-side-att { width: 100%; } }
+
+/* @menciones */
+.cv-mmenu {
+  position: absolute; z-index: 5; min-width: 260px; max-width: 340px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(9,30,66,.25); padding: 4px; max-height: 280px; overflow: auto;
+}
+.cv-mmenu-h { font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 8px 6px; text-transform: uppercase; letter-spacing: .04em; }
+.cv-mitem { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; min-width: 0; }
+.cv-mitem.sel, .cv-mitem:hover { background: var(--accent-soft); }
+.cv-mname { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-muser { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.cv-mention { color: var(--accent); font-weight: 600; background: var(--accent-soft); border-radius: 3px; padding: 0 2px; }
+.cv-comment { position: relative; }

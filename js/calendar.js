@@ -670,6 +670,25 @@
     $('tokLink').href = authUrl(); $('tokIn').value = '';
   }
 
+  // Las @menciones necesitan el nombre de usuario de cada miembro; si Trello no lo da, lo pedimos a la API.
+  var userCache = {}, usersFetched = false;
+  function applyUserCache(mem) {
+    mem.forEach(function (m) {
+      var r = userCache[m.id];
+      if (r) { m.username = m.username || r.username; m.fullName = m.fullName || r.fullName; m.avatarUrl = m.avatarUrl || r.avatarUrl; }
+    });
+  }
+  function ensureUsernames() {
+    var mem = (state.board && state.board.members) || [];
+    applyUserCache(mem);
+    if (usersFetched || !state.canWrite || !mem.length || mem.every(function (m) { return m.username; })) return;
+    usersFetched = true;
+    apiRequest('GET', '/boards/' + state.board.id + '/members?fields=fullName,username,initials,avatarUrl').then(function (list) {
+      (list || []).forEach(function (m) { userCache[m.id] = m; });
+      applyUserCache((state.board && state.board.members) || []);
+    }).catch(function () { usersFetched = false; });
+  }
+
   // ───────────────────────── Plantillas ─────────────────────────
   var templatesLoading = null;
   function loadTemplates() {
@@ -834,6 +853,7 @@
       renderSourceSelect();
       renderFilters();
       render();
+      ensureUsernames();
     }).catch(function (err) {
       $('cal').innerHTML = '<div class="empty">No se pudieron cargar las tarjetas: ' + esc(err && err.message) + '</div>';
     }).then(function () { loading = null; });
