@@ -55,8 +55,23 @@
   }
 
   // Texto plano del pie: quita el markdown que usa Trello y resalta #hashtags, @menciones y enlaces.
+  // Si la descripción tiene una sección «Contenido / Copy» (tarjetas migradas de Loomly),
+  // el texto del post es solo esa sección, hasta el siguiente separador ---.
+  function copyOf(md) {
+    var lines = String(md || '').split('\n'), start = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (/^\s*#{1,6}\s.*\b(contenido|copy)\b/i.test(lines[i])) { start = i + 1; break; }
+    }
+    if (start === -1) return md;
+    var out = [];
+    for (var j = start; j < lines.length; j++) {
+      if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[j])) break;
+      out.push(lines[j]);
+    }
+    return out.join('\n');
+  }
   function plain(md) {
-    return String(md || '')
+    return String(copyOf(md) || '')
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1')
       .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
       .replace(/`([^`]+)`/g, '$1').replace(/^#{1,6}\s+/gm, '').trim();
