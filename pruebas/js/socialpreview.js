@@ -1,6 +1,6 @@
 /* Vista previa por red social dentro de la tarjeta.
  * Las redes y formatos salen de las ETIQUETAS de la tarjeta:
- *   red     → Instagram, TikTok, LinkedIn, Facebook, X/Twitter
+ *   red     → Instagram/IG, Facebook/FB, TikTok/TT, YouTube/YT, LinkedIn, X/Twitter
  *   formato → Reel, Story/Historia, Carrusel (si no hay, es un post normal)
  * Ej.: «Instagram» + «Reel» → Reel de Instagram; «Instagram» + «Story» + «Reel» → dos vistas.
  *
@@ -13,12 +13,13 @@
 
   var NETS = {
     instagram: { name: 'Instagram', limit: 2200, fold: 125, re: /instagram|^ig$/i },
-    tiktok:    { name: 'TikTok',    limit: 2200, fold: 80,  re: /tik\s?tok/i },
-    linkedin:  { name: 'LinkedIn',  limit: 3000, fold: 210, re: /linked\s?in/i },
+    tiktok:    { name: 'TikTok',    limit: 2200, fold: 80,  re: /tik\s?tok|^tt$|^tk$/i },
+    youtube:   { name: 'YouTube',   limit: 5000, fold: 100, re: /you\s?tube|^yt$/i },
+    linkedin:  { name: 'LinkedIn',  limit: 3000, fold: 210, re: /linked\s?in|^li$/i },
     facebook:  { name: 'Facebook',  limit: 63206, fold: 250, re: /facebook|^fb$/i },
     x:         { name: 'X',         limit: 280,  fold: 280, re: /twitter|^x$/i }
   };
-  var ORDER = ['instagram', 'tiktok', 'linkedin', 'facebook', 'x'];
+  var ORDER = ['instagram', 'facebook', 'tiktok', 'youtube', 'linkedin', 'x'];
   var FMTS = {
     reel:     { name: 'Reel',     re: /\breels?\b/i },
     story:    { name: 'Story',    re: /\bstor(y|ies)\b|\bhistorias?\b/i },
@@ -30,6 +31,7 @@
     facebook:  ['post', 'reel', 'story', 'carousel'],
     linkedin:  ['post', 'carousel'],
     tiktok:    ['video'],
+    youtube:   ['video', 'reel'],
     x:         ['post']
   };
 
@@ -45,7 +47,7 @@
       var ok = fmts.filter(function (f) { return SUPPORTS[net].indexOf(f) !== -1; });
       if (!ok.length) ok = [SUPPORTS[net][0]];
       ok.forEach(function (fmt) {
-        var label = NETS[net].name + (FMTS[fmt] ? ' · ' + FMTS[fmt].name : '');
+        var label = NETS[net].name + (FMTS[fmt] ? ' · ' + (net === 'youtube' && fmt === 'reel' ? 'Short' : FMTS[fmt].name) : '');
         out.push({ key: net + ':' + fmt, net: net, fmt: fmt, label: label });
       });
     });
@@ -185,7 +187,15 @@
     h += '<div class="sp-acts x"><span>' + I.chat + '</span><span>' + I.repost + '</span><span>' + I.heart + '</span><span>' + I.save + '</span></div>';
     return h + '</div></div>';
   }
-  var RENDER = { instagram: instagram, tiktok: tiktok, linkedin: linkedin, facebook: facebook, x: x };
+  function youtube(o, media, text) {
+    if (o.fmt === 'reel') return verticalVideo(o, media, text, 'youtube', 'sp-reel');
+    return '<div class="sp-yt"><div class="sp-media" style="aspect-ratio:16/9">' + mediaEl(media[0], o) + '</div>' +
+      '<div class="sp-yt-t">' + o.esc(o.card.name) + '</div>' +
+      '<div class="sp-top">' + av(o.account, 32) + '<div><strong>' + o.esc(o.account.name) + '</strong></div>' +
+      '<span class="sp-yt-sub">Suscribirse</span></div>' +
+      '<div class="sp-yt-d"><div class="sp-muted">' + o.esc(o.when) + '</div>' + caption(text, 'youtube', o.expanded, o.esc) + '</div></div>';
+  }
+  var RENDER = { instagram: instagram, tiktok: tiktok, youtube: youtube, linkedin: linkedin, facebook: facebook, x: x };
 
   function checks(net, fmt, text, media, o) {
     var out = [], bad = function (s) { out.push('<span class="sp-bad">' + s + '</span>'); };
@@ -198,7 +208,7 @@
       var tags = (text.match(/(^|\s)#[\wáéíóúñü]+/gi) || []).length;
       if (tags) out.push('<span class="' + (net === 'instagram' && tags > 30 ? 'sp-bad' : '') + '">' + tags + ' hashtag' + (tags > 1 ? 's' : '') + '</span>');
     }
-    if ((net === 'tiktok' || fmt === 'reel') && !vids) bad((net === 'tiktok' ? 'TikTok' : 'Un reel') + ' necesita un vídeo');
+    if ((net === 'tiktok' || net === 'youtube' || fmt === 'reel') && !vids) bad((net === 'tiktok' ? 'TikTok' : net === 'youtube' ? 'YouTube' : 'Un reel') + ' necesita un vídeo');
     if (fmt === 'carousel' && media.length < 2) bad('Un carrusel necesita al menos 2 imágenes');
     if (media.length > 20 && (net === 'instagram' || fmt === 'carousel')) bad('Máximo 20 elementos por carrusel');
     if (net === 'x' && media.length > 4) bad('X muestra como máximo 4 imágenes');
