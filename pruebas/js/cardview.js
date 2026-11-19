@@ -26,19 +26,68 @@
     return d.toLocaleDateString(ctx.locale, { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
       d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' });
   }
-  // Markdown mínimo: enlaces, negrita, cursiva, código y saltos de línea.
-  function md(text) {
-    var h = esc(text || '');
-    h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
-    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-    h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Markdown de Trello: títulos, negrita, cursiva, tachado, listas, citas, separadores,
+  // bloques de código, enlaces, menciones y caracteres escapados (\* \#…).
+  function mdInline(text) {
+    var keep = [];
+    function put(html) { keep.push(html); return '\u0000' + (keep.length - 1) + '\u0000'; }
+    var s = String(text == null ? '' : text);
+    s = s.replace(/`([^`\n]+)`/g, function (m, c) { return put('<code>' + esc(c) + '</code>'); });
+    s = s.replace(/\\([\\`*_{}\[\]()#+\-.!~>|])/g, function (m, c) { return put(esc(c)); });
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function (m, t, u) {
+      return put('<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(t) + '</a>');
+    });
+    s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, function (m, pre, u) {
+      return pre + put('<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(u) + '</a>');
+    });
+    var h = esc(s);
+    h = h.replace(/\*\*(?=\S)([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/(^|[^\w])__(?=\S)([\s\S]+?)__(?!\w)/g, '$1<strong>$2</strong>');
+    h = h.replace(/~~(?=\S)([\s\S]+?)~~/g, '<del>$1</del>');
+    h = h.replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?![*\w])/g, '$1<em>$2</em>');
+    h = h.replace(/(^|[^\w])_(?=\S)([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>');
     h = h.replace(/(^|[\s(>])@([a-z0-9_]{2,})/gi, function (all, pre, u) {
       var m = memberByUsername(u);
       return pre + '<span class="cv-mention"' + (m ? ' title="' + esc(m.fullName) + '"' : '') + '>@' + u + '</span>';
     });
-    return h.replace(/\n/g, '<br>');
+    for (var i = 0; i < 3 && h.indexOf('\u0000') !== -1; i++) {
+      h = h.replace(/\u0000(\d+)\u0000/g, function (m, n) { return keep[+n]; });
+    }
+    return h;
+  }
+  function md(text) {
+    var lines = String(text || '').replace(/\r\n?/g, '\n').split('\n'), out = [], para = [], i = 0;
+    function flush() { if (para.length) { out.push('<p>' + para.map(mdInline).join('<br>') + '</p>'); para = []; } }
+    var LIST = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+    while (i < lines.length) {
+      var l = lines[i], m;
+      if (/^\s*```/.test(l)) {
+        flush(); var code = []; i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i++]);
+        out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>'); i++; continue;
+      }
+      if (!l.trim()) { flush(); i++; continue; }
+      if (/^\s*(-\s*){3,}$|^\s*(\*\s*){3,}$|^\s*(_\s*){3,}$/.test(l)) { flush(); out.push('<hr>'); i++; continue; }
+      if ((m = l.match(/^\s*(#{1,6})\s+(.*?)\s*#*\s*$/))) {
+        flush(); out.push('<h' + m[1].length + ' class="cv-md-h">' + mdInline(m[2]) + '</h' + m[1].length + '>'); i++; continue;
+      }
+      if (/^\s*>/.test(l)) {
+        flush(); var q = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
+        out.push('<blockquote>' + md(q.join('\n')) + '</blockquote>'); continue;
+      }
+      if ((m = l.match(LIST))) {
+        flush(); var ordered = /\d/.test(m[2]), items = [];
+        while (i < lines.length && (m = lines[i].match(LIST)) && /\d/.test(m[2]) === ordered) {
+          var lvl = Math.min(3, Math.floor(m[1].replace(/\t/g, '  ').length / 2));
+          items.push('<li' + (lvl ? ' style="margin-left:' + (lvl * 18) + 'px"' : '') + '>' + mdInline(m[3]) + '</li>'); i++;
+        }
+        out.push((ordered ? '<ol>' : '<ul>') + items.join('') + (ordered ? '</ol>' : '</ul>')); continue;
+      }
+      para.push(l); i++;
+    }
+    flush();
+    return out.join('');
   }
   function avatar(m, size) {
     var s = size || 28;
@@ -183,7 +232,7 @@
     // Descripción
     h += '<section class="cv-sec"><div class="cv-sec-h"><h3>Descripción</h3>' +
       (w ? '<button class="btn cv-sm" data-act="edit-desc">Editar</button>' : '') + '</div>' +
-      '<div class="cv-desc" data-desc>' + (card.desc ? md(card.desc) : '<span class="cv-muted">' +
+      '<div class="cv-desc cv-md" data-desc>' + (card.desc ? md(card.desc) : '<span class="cv-muted">' +
         (w ? 'Añade una descripción más detallada…' : 'Sin descripción') + '</span>') + '</div>' +
       (w ? '<div class="cv-desc-edit" hidden><textarea rows="6" data-mention>' + esc(card.desc || '') + '</textarea>' +
         '<div class="cv-actions"><button class="btn primary cv-sm" data-act="save-desc">Guardar</button>' +
@@ -227,7 +276,7 @@
         '<div class="cv-prog"><span>' + pct + '%</span><div><i style="width:' + pct + '%"' + (pct === 100 ? ' class="full"' : '') + '></i></div></div>' +
         items.map(function (it) {
           return '<label class="cv-item' + (it.state === 'complete' ? ' done' : '') + '"><input type="checkbox" data-check="' + esc(it.id) +
-            '" data-cl="' + esc(cl.id) + '"' + (it.state === 'complete' ? ' checked' : '') + (w ? '' : ' disabled') + '><span>' + md(it.name) + '</span></label>';
+            '" data-cl="' + esc(cl.id) + '"' + (it.state === 'complete' ? ' checked' : '') + (w ? '' : ' disabled') + '><span>' + mdInline(it.name) + '</span></label>';
         }).join('') +
         (w ? '<form class="cv-additem" data-cl="' + esc(cl.id) + '"><input type="text" placeholder="Añadir un elemento"><button class="btn cv-sm">Añadir</button></form>' : '') +
         '</section>';
@@ -254,7 +303,9 @@
             : '<a class="cv-sa-name" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</a>';
           return '<div class="cv-sa">' + ico + '<div class="cv-sa-txt">' + nameEl +
             '<span class="cv-muted">' + (a.bytes ? fmtBytes(a.bytes) : (a.isUpload === false ? 'Enlace' : '')) + '</span></div>' +
-            '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a></div>';
+            '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a>' +
+            (w ? '<button class="cv-sa-del" data-act="del-att" data-att="' + esc(a.id) + '" title="Eliminar ' + esc(a.name) + '" aria-label="Eliminar">' +
+              '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>' : '') + '</div>';
         }).join('') + '</div>';
     }
     // Comentarios
@@ -267,7 +318,7 @@
       h += comments.length ? comments.map(function (a) {
         var m = a.memberCreator || {};
         return '<div class="cv-cmt">' + avatar(m, 26) + '<div><div class="cv-cmt-h"><strong>' + esc(m.fullName || '') + '</strong>' +
-          '<span class="cv-muted">' + esc(fmtDateTime(a.date)) + '</span></div><div class="cv-cmt-b">' + md(a.data && a.data.text) + '</div></div></div>';
+          '<span class="cv-muted">' + esc(fmtDateTime(a.date)) + '</span></div><div class="cv-cmt-b cv-md">' + md(a.data && a.data.text) + '</div></div></div>';
       }).join('') : '<div class="cv-muted">Sin comentarios.</div>';
     } else if (!w) {
       h += '<div class="cv-muted">' + ((card.badges && card.badges.comments) ? card.badges.comments + ' comentario(s). ' : '') +
@@ -514,6 +565,7 @@
       else if (act === 'copy') copyLink();
       else if (act === 'cv-tab') { sp.tab = b.getAttribute('data-tab'); paint(); }
       else if (act === 'dl-all') downloadAll();
+      else if (act === 'del-att') deleteAttachment(b.getAttribute('data-att'));
       else if (act === 'sp-net') { sp.net = b.getAttribute('data-net'); sp.slide = 0; sp.expanded = false; sp.editing = false; paint(); }
       else if (act === 'sp-play') { if (b.paused) b.play().catch(function () {}); else b.pause(); b.parentNode.classList.toggle('playing', !b.paused); }
       else if (act === 'sp-edit') {
@@ -684,6 +736,27 @@
       (cl.checkItems || []).forEach(function (it) { if (it.id === iid) it.state = st; });
     });
     paint();
+  }
+  function deleteAttachment(id) {
+    var a = attById(id);
+    if (!a || !needWrite()) return;
+    if (!confirm('¿Eliminar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nSe borra también en Trello y no se puede deshacer.')) return;
+    var cid = card.id;
+    setBusy(true);
+    ctx.api('DELETE', '/cards/' + cid + '/attachments/' + id).then(function () {
+      var drop = function (list) { return (list || []).filter(function (x) { return x.id !== id; }); };
+      if (full && full.attachments) full.attachments = drop(full.attachments);
+      if (card && card.id === cid) {
+        if (card.attachments) card.attachments = drop(card.attachments);
+        if (card.cover && card.cover.idAttachment === id) card.cover = null;
+        if (card.badges && card.badges.attachments) card.badges.attachments--;
+        sp.slide = 0;
+        paint(); ctx.onChange(card);
+      }
+      ctx.toast('Adjunto eliminado');
+    }).catch(function (err) {
+      ctx.toast('No se pudo eliminar: ' + (err && err.message ? err.message : err), true);
+    }).then(function () { setBusy(false); });
   }
   // Descarga todos los adjuntos, uno detrás de otro, igual que el botón ↓ de cada uno.
   // El navegador puede pedir permiso para "descargar varios archivos" o para abrir ventanas emergentes.

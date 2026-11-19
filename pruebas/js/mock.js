@@ -72,7 +72,7 @@
     cards[cards.length - 2].isTemplate = true;
     cards[0].cover = { idAttachment: 'a2' };
     lists[2].name = 'Require Edits'; lists[3].name = 'Approval';
-    cards[0].desc = 'Preparar la **reunión de kickoff** con el cliente.\nAgenda: https://ejemplo.com/agenda';
+    cards[0].desc = '## 🎯 Objetivo\n\nPreparar la **reunión de kickoff** con el cliente, *sin prisas* y ~~con~~ sin powerpoint.\n\n---\n\n### Agenda\n\n- Presentaciones\n- Revisión del **briefing**\n  - Tono de marca\n1. Calendario\n2. Siguientes pasos\n\n> Nota: confirmar sala el lunes.\n\nAgenda: https://ejemplo.com/agenda · \\#noesuntitulo · `código`';
     var extra = {
       c1: {
         checklists: [{ id: 'cl1', name: 'Preparación', checkItems: [
@@ -198,6 +198,13 @@
               if (method === 'POST') cc[key] = cc[key].concat(pool.filter(function (x) { return x.id === body.value; }));
               else cc[key] = cc[key].filter(function (x) { return x.id !== mm[3]; });
               return resolve([]);
+            }
+            if (method === 'DELETE' && (mm = g.match(/^\/cards\/([^/]+)\/attachments\/([^/]+)$/))) {
+              cc = cards.filter(function (x) { return x.id === mm[1]; })[0];
+              var dropA = function (l) { return (l || []).filter(function (x) { return x.id !== mm[2]; }); };
+              if (cc) cc.attachments = dropA(cc.attachments);
+              if (extra[mm[1]]) extra[mm[1]].attachments = dropA(extra[mm[1]].attachments);
+              return resolve({});
             }
             var m = path.match(/^\/cards\/([^/]+)(?:\/customField\/([^/]+)\/item)?$/);
             var c = m && cards.filter(function (x) { return x.id === m[1]; })[0];
