@@ -530,3 +530,19 @@ body.detail .events { overflow: visible; }
 .sp-yt-t { font-weight: 600; font-size: 15px; padding: 10px 12px 0; }
 .sp-yt-sub { background: #0f0f0f; color: #fff; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; }
 .sp-yt-d { margin: 0 12px 12px; background: #f2f2f2; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+
+/* Vídeo de la vista previa */
+.sp-media video[data-act] { cursor: pointer; }
+.sp-media.playing .sp-vbadge { display: none; }
+/* Copy por red */
+.sp-copy { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); }
+.sp-copy-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sp-copy-h .sp-sp { flex: 1; }
+.sp-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--muted); }
+.sp-badge.own { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.sp-copy-ta { width: 100%; margin-top: 10px; font: inherit; font-size: 14px; line-height: 1.45; color: var(--text); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+.sp-copy-ta:focus { outline: 2px solid var(--accent); }
+.sp-copy-f { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.sp-copy-f .sp-sp { flex: 1; }
+.sp-copy-hint { margin: 8px 0 0; font-size: 12px; }

@@ -6,7 +6,7 @@
   'use strict';
 
   var ctx, card, full, root, busy = 0;
-  var sp = { tab: 'details', net: null, slide: 0, expanded: false }; // pestaña y estado de la vista previa
+  var sp = { tab: 'details', net: null, slide: 0, expanded: false, editing: false }; // pestaña y estado de la vista previa
   var $ = function (sel) { return root.querySelector(sel); };
 
   function esc(s) {
@@ -126,7 +126,7 @@
     if (sp.tab === 'preview') {
       var bname = ((board && board.name) || 'Tu marca').replace(/\s*\(.*?\)\s*/g, ' ').trim();
       h += CalSocial.render({
-        card: card, attachments: attachments, key: sp.net, slide: sp.slide, expanded: sp.expanded,
+        card: card, attachments: attachments, key: sp.net, slide: sp.slide, expanded: sp.expanded, editing: sp.editing,
         kindOf: kindOf, bestPreview: bestPreview, esc: esc,
         when: card.due ? fmtDateTime(card.due) : 'Sin fecha',
         whenShort: card.due ? new Date(card.due).toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' }) : '',
@@ -339,15 +339,24 @@
   }
   var mediaCacheSync = {};
   function hydrateMedia(attachments) {
-    root.querySelectorAll('img[data-media]').forEach(function (img) {
+    root.querySelectorAll('img[data-media], video[data-media]').forEach(function (img) {
       var a = attById(img.getAttribute('data-media'));
       if (!a) return;
       var box = img.parentNode;
       box.classList.add('loading');
+      firstFrame(img);
       loadInto(img, a, img.getAttribute('data-size'),
         function () { box.classList.remove('loading'); },
         function () { mediaFail(img, a, a.isUpload !== false && !ctx.canWrite()); });
     });
+  }
+  // Vídeos de la vista previa: enseña el primer fotograma en cuanto hay datos.
+  function firstFrame(v) {
+    if (v.tagName !== 'VIDEO') return;
+    v.addEventListener('loadedmetadata', function () { if (v.paused && v.currentTime === 0) { try { v.currentTime = 0.1; } catch (e) {} } }, { once: true });
+  }
+  function spCount(ta) {
+    var c = $('[data-sp-count]'); if (c) c.textContent = ta.value.trim().length.toLocaleString('es-ES') + ' caracteres';
   }
   function mediaFail(img, a, needAuth) {
     var box = img.parentNode;
@@ -505,7 +514,23 @@
       else if (act === 'copy') copyLink();
       else if (act === 'cv-tab') { sp.tab = b.getAttribute('data-tab'); paint(); }
       else if (act === 'dl-all') downloadAll();
-      else if (act === 'sp-net') { sp.net = b.getAttribute('data-net'); sp.slide = 0; sp.expanded = false; paint(); }
+      else if (act === 'sp-net') { sp.net = b.getAttribute('data-net'); sp.slide = 0; sp.expanded = false; sp.editing = false; paint(); }
+      else if (act === 'sp-play') { if (b.paused) b.play().catch(function () {}); else b.pause(); b.parentNode.classList.toggle('playing', !b.paused); }
+      else if (act === 'sp-edit') {
+        if (!needWrite()) return;
+        sp.editing = true; paint();
+        var sta = $('[data-sp-copy]'); if (sta) { sta.focus(); spCount(sta); }
+      }
+      else if (act === 'sp-cancel') { sp.editing = false; paint(); }
+      else if (act === 'sp-save' || act === 'sp-reset') {
+        var cur = CalSocial.current(card, sp.net), nm = CalSocial.NETS[cur.net].name;
+        if (act === 'sp-reset' && !confirm('¿Quitar el copy propio de ' + nm + ' y volver a usar el copy general?')) return;
+        var val = act === 'sp-save' ? $('[data-sp-copy]').value : '';
+        var nd = CalSocial.setCopy(card.desc || '', cur.net, val);
+        sp.editing = false;
+        save('PUT', '/cards/' + card.id, { desc: nd }, function (c) { c.desc = nd; },
+          val.trim() ? 'Copy de ' + nm + ' guardado' : 'Ahora ' + nm + ' usa el copy general');
+      }
       else if (act === 'sp-slide') { sp.slide = +b.getAttribute('data-to'); paint(); }
       else if (act === 'sp-more') { sp.expanded = true; paint(); }
       else if (act === 'lightbox') openLightbox(b.getAttribute('data-att'));
@@ -602,6 +627,7 @@
     });
     root.addEventListener('input', function (e) {
       if (e.target.classList.contains('cv-title')) autosize(e.target);
+      if (e.target.hasAttribute && e.target.hasAttribute('data-sp-copy')) spCount(e.target);
       if (e.target.hasAttribute && e.target.hasAttribute('data-mention')) { mm.sel = mm.ta === e.target ? mm.sel : 0; updateMention(e.target); }
     });
     root.addEventListener('keyup', function (e) {
@@ -705,7 +731,7 @@
 
   // ───────────────────────── API pública ─────────────────────────
   function open(c) {
-    card = c; full = null; sp = { tab: 'details', net: null, slide: 0, expanded: false };
+    card = c; full = null; sp = { tab: 'details', net: null, slide: 0, expanded: false, editing: false };
     root.hidden = false;
     paint();
     loadFull();

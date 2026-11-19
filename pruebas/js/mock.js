@@ -116,7 +116,8 @@
     cards.splice(12, 0, card('Vídeo TikTok receta rápida', 'L2', iso(2, 13), null, ['l6', 'l9', 'l8'], ['m3']));
     var tk = cards[12];
     tk.desc = 'Receta en 30 segundos 🌸 ¿La probáis? #receta #fyp';
-    tk.attachments = [{ id: 'b5', name: 'receta.mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', mimeType: 'video/mp4', isUpload: false }];
+    tk.attachments = [{ id: 'b5', name: 'receta.mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', mimeType: 'video/mp4', isUpload: true, bytes: 1100000 }];
+    tk.desc = '📅 **Publicación:** 20/11/2026 13:00\n📌 **Estado:** Pendiente\n\n---\n\n## ✍️ Contenido / Copy\n\nReceta en 30 segundos 🌸 ¿La probáis? #receta #fyp\n\n---\n\n## ✍️ Copy · TikTok\n\nPOV: tienes 30 segundos y hambre 🌸 #receta #fyp #parati';
 
     cards[cards.length - 2].isTemplate = true;
     var store = {};

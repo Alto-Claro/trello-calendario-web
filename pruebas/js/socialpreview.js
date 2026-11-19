@@ -54,24 +54,64 @@
     return out;
   }
 
-  // Texto plano del pie: quita el markdown que usa Trello y resalta #hashtags, @menciones y enlaces.
-  // Si la descripción tiene una sección «Contenido / Copy» (tarjetas migradas de Loomly),
-  // el texto del post es solo esa sección, hasta el siguiente separador ---.
-  function copyOf(md) {
-    var lines = String(md || '').split('\n'), start = -1;
+  // ───── Copy por red, guardado en la descripción de la tarjeta ─────
+  // Sección general:  «## ✍️ Contenido / Copy» (tarjetas de Loomly) → la usan todas las redes.
+  // Sección por red:  «## ✍️ Copy · Instagram» → solo esa red. Cada sección acaba en el siguiente
+  // separador (---) o el siguiente título. Si no hay ninguna sección, el copy es toda la descripción.
+  var NET_WORDS = {
+    instagram: /\b(instagram|ig)\b/i, facebook: /\b(facebook|fb)\b/i, tiktok: /\b(tik\s?tok|tt)\b/i,
+    youtube: /\b(you\s?tube|yt)\b/i, linkedin: /\blinked\s?in\b/i, x: /\b(twitter|x)\b/i
+  };
+  var HEADING = /^\s*#{1,6}\s/, SEP = /^\s*(---+|\*\*\*+|___+)\s*$/;
+  function sections(md) {
+    var lines = String(md || '').split('\n'), out = [];
     for (var i = 0; i < lines.length; i++) {
-      if (/^\s*#{1,6}\s.*\b(contenido|copy)\b/i.test(lines[i])) { start = i + 1; break; }
+      if (!HEADING.test(lines[i]) || !/\b(contenido|copy)\b/i.test(lines[i])) continue;
+      var net = null;
+      ORDER.forEach(function (id) { if (!net && NET_WORDS[id].test(lines[i])) net = id; });
+      var j = i + 1;
+      while (j < lines.length && !SEP.test(lines[j]) && !HEADING.test(lines[j])) j++;
+      out.push({ net: net, head: i, start: i + 1, end: j, text: lines.slice(i + 1, j).join('\n').trim() });
     }
-    if (start === -1) return md;
-    var out = [];
-    for (var j = start; j < lines.length; j++) {
-      if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[j])) break;
-      out.push(lines[j]);
-    }
-    return out.join('\n');
+    return { lines: lines, list: out };
   }
+  function copyFor(md, net) {
+    var sec = sections(md), own = sec.list.filter(function (x) { return x.net === net; })[0];
+    if (own) return { text: own.text, own: true };
+    var gen = sec.list.filter(function (x) { return !x.net; })[0];
+    if (gen) return { text: gen.text, own: false };
+    return { text: removeSections(sec, sec.list).trim(), own: false };
+  }
+  // Quita secciones (y el separador --- que las precede) de la descripción.
+  function removeSections(sec, which) {
+    var drop = {};
+    which.forEach(function (x) {
+      var a = x.head, k = a - 1;
+      while (k >= 0 && !sec.lines[k].trim()) k--;
+      if (k >= 0 && SEP.test(sec.lines[k])) a = k;
+      for (var i = a; i < x.end; i++) drop[i] = true;
+    });
+    return sec.lines.filter(function (_, i) { return !drop[i]; }).join('\n').replace(/\n{3,}/g, '\n\n');
+  }
+  // Devuelve la descripción con el copy de esa red cambiado (text vacío o null = quitar el copy propio).
+  function setCopy(md, net, text) {
+    var sec = sections(md), own = sec.list.filter(function (x) { return x.net === net; })[0];
+    text = (text || '').trim();
+    if (!text) return own ? removeSections(sec, [own]).trim() : String(md || '');
+    if (own) {
+      return sec.lines.slice(0, own.start).concat(['', text, ''], sec.lines.slice(own.end)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    var block = ['---', '', '## ✍️ Copy · ' + NETS[net].name, '', text];
+    if (sec.list.length) { // justo después de las otras secciones de copy
+      var last = sec.list[sec.list.length - 1];
+      return sec.lines.slice(0, last.end).concat([''], block, [''], sec.lines.slice(last.end)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    return (String(md || '').replace(/\s+$/, '') + '\n\n' + block.join('\n')).replace(/^\s+/, '');
+  }
+
+  // Texto plano del pie: quita el markdown que usa Trello y resalta #hashtags, @menciones y enlaces.
   function plain(md) {
-    return String(copyOf(md) || '')
+    return String(md || '')
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1')
       .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
       .replace(/`([^`]+)`/g, '$1').replace(/^#{1,6}\s+/gm, '').trim();
@@ -102,9 +142,10 @@
     if (!a) return '<div class="sp-media-ph">Sin imagen ni vídeo adjunto</div>';
     if (o.kindOf(a) === 'video') {
       if (a.isUpload === false) {
-        return '<video src="' + o.esc(a.url) + '" muted loop playsinline autoplay></video><span class="sp-vbadge">▶</span>';
+        return '<video src="' + o.esc(a.url) + '" muted loop playsinline autoplay data-act="sp-play"></video><span class="sp-vbadge">▶</span>';
       }
-      return (o.bestPreview(a) ? '<img data-media="' + o.esc(a.id) + '" data-size="thumb" alt="">' : '<div class="sp-media-ph">Vídeo</div>') +
+      // Sin depender de la portada: se carga el propio vídeo y se muestra su primer fotograma.
+      return '<video data-media="' + o.esc(a.id) + '" data-size="full" muted loop playsinline preload="metadata" data-act="sp-play"></video>' +
         '<span class="sp-vbadge">▶</span>';
     }
     return '<img data-media="' + o.esc(a.id) + '" data-size="cover" alt="' + o.esc(a.name || '') + '">';
@@ -231,12 +272,38 @@
     return out.join('<span class="sp-sep">·</span>');
   }
 
+  function editor(o, net, cp) {
+    var name = NETS[net].name;
+    var h = '<div class="sp-copy' + (o.editing ? ' editing' : '') + '"><div class="sp-copy-h"><strong>Copy para ' + name + '</strong>' +
+      '<span class="sp-badge' + (cp.own ? ' own' : '') + '">' + (cp.own ? 'Propio de ' + name : 'Copy general') + '</span>';
+    if (!o.editing) {
+      h += '<span class="sp-sp"></span><button class="btn cv-sm" data-act="sp-edit">' + (cp.own ? 'Editar' : 'Personalizar para ' + name) + '</button>';
+      if (cp.own) h += '<button class="btn cv-sm" data-act="sp-reset" title="Quita el copy propio y vuelve a usar el general">Usar el general</button>';
+    }
+    h += '</div>';
+    if (o.editing) {
+      h += '<textarea class="sp-copy-ta" rows="7" data-sp-copy data-mention>' + o.esc(cp.text) + '</textarea>' +
+        '<div class="sp-copy-f"><span class="cv-muted" data-sp-count></span><span class="sp-sp"></span>' +
+        '<button class="btn cv-sm" data-act="sp-cancel">Cancelar</button>' +
+        '<button class="btn primary cv-sm" data-act="sp-save">Guardar copy de ' + name + '</button></div>';
+    }
+    h += '<p class="cv-muted sp-copy-hint">' + (cp.own
+      ? 'Guardado en la descripción de la tarjeta, en la sección «Copy · ' + name + '».'
+      : 'Se usa el copy general de la descripción. Si lo personalizas, se guarda en la descripción en una sección «Copy · ' + name + '» y las demás redes no cambian.') + '</p>';
+    return h + '</div>';
+  }
+  function current(card, key) {
+    var list = detect(card);
+    return list.filter(function (d) { return d.key === key; })[0] || list[0] || null;
+  }
+
   function render(o) {
     var list = detect(o.card);
     if (!list.length) return '';
     var cur = list.filter(function (d) { return d.key === o.key; })[0] || list[0];
     var media = mediaList(o.card, o.attachments || [], o.kindOf);
-    var text = plain(o.card.desc);
+    var cp = copyFor(o.card.desc, cur.net);
+    var text = plain(cp.text);
     var oo = Object.create(o); oo.fmt = cur.fmt;
     var h = '<div class="sp">';
     if (list.length > 1) {
@@ -248,8 +315,9 @@
     }
     h += '<div class="sp-stage"><div class="sp-phone">' + RENDER[cur.net](oo, media, text) + '</div></div>';
     h += '<div class="sp-checks">' + checks(cur.net, cur.fmt, text, media, o) + '</div>';
+    h += editor(o, cur.net, cp);
     return h + '</div>';
   }
 
-  window.CalSocial = { detect: detect, render: render };
+  window.CalSocial = { NETS: NETS, detect: detect, render: render, current: current, copyFor: copyFor, setCopy: setCopy };
 })();
