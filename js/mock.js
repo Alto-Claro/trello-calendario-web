@@ -16,7 +16,13 @@
       { id: 'l2', name: 'Urgente', color: 'red' },
       { id: 'l3', name: 'Diseño', color: 'purple' },
       { id: 'l4', name: 'SEO', color: 'green' },
-      { id: 'l5', name: 'Redes', color: 'orange_light' }
+      { id: 'l5', name: 'Redes', color: 'orange_light' },
+      { id: 'l6', name: 'Instagram', color: 'pink' },
+      { id: 'l7', name: 'LinkedIn', color: 'blue_dark' },
+      { id: 'l8', name: 'TikTok', color: 'black' },
+      { id: 'l9', name: 'Reel', color: 'purple_light' },
+      { id: 'l10', name: 'Story', color: 'yellow_light' },
+      { id: 'l11', name: 'Carrusel', color: 'sky_light' }
     ];
     var members = [
       { id: 'm1', fullName: 'Ana López', initials: 'AL', username: 'ana' },
@@ -66,7 +72,7 @@
     cards[cards.length - 2].isTemplate = true;
     cards[0].cover = { idAttachment: 'a2' };
     lists[2].name = 'Require Edits'; lists[3].name = 'Approval';
-    cards[0].desc = 'Preparar la **reunión de kickoff** con el cliente.\nAgenda: https://ejemplo.com/agenda';
+    cards[0].desc = '## 🎯 Objetivo\n\nPreparar la **reunión de kickoff** con el cliente, *sin prisas* y ~~con~~ sin powerpoint.\n\n---\n\n### Agenda\n\n- Presentaciones\n- Revisión del **briefing**\n  - Tono de marca\n1. Calendario\n2. Siguientes pasos\n\n> Nota: confirmar sala el lunes.\n\nAgenda: https://ejemplo.com/agenda · \\#noesuntitulo · `código`';
     var extra = {
       c1: {
         checklists: [{ id: 'cl1', name: 'Preparación', checkItems: [
@@ -89,6 +95,30 @@
     if (mk) mk.attachments = [{ id: 'a9', name: 'mockup.svg', url: './img/demo/foto3.svg', mimeType: 'image/svg+xml' }];
     var fp = cards.filter(function (c) { return /Fotos producto/.test(c.name); })[0];
     if (fp) { fp.attachments = [{ id: 'a8', name: 'fotos.svg', url: './img/demo/foto2.svg', mimeType: 'image/svg+xml' }]; fp.cover = { idAttachment: 'a8' }; }
+    // Posts de redes con texto y medios para la vista previa.
+    function byName(re) { return cards.filter(function (c) { return re.test(c.name); })[0]; }
+    var li = byName(/post LinkedIn/);
+    li.labels = L(['l5', 'l7']);
+    li.desc = '🚀 Hoy cumplimos 10 años ayudando a marcas a contar su historia.\n\nGracias a cada cliente que confió en nosotros, y al equipo que lo hace posible cada día. Esto no ha hecho más que empezar.\n\n#Aniversario #Marketing #Branding';
+    li.attachments = [{ id: 'b1', name: 'aniversario.svg', url: './img/demo/foto1.svg', mimeType: 'image/svg+xml' }];
+    var st = byName(/Stories Instagram/);
+    st.labels = L(['l6', 'l10']);
+    st.desc = 'Detrás de las cámaras de la sesión de hoy 📸 #backstage';
+    st.attachments = [{ id: 'b2', name: 'story.svg', url: './img/demo/foto2.svg', mimeType: 'image/svg+xml' }];
+    var fp2 = byName(/Fotos producto/);
+    fp2.labels = L(['l3', 'l6', 'l11']);
+    fp2.desc = 'Nueva colección de otoño 🍂 Desliza para ver todos los colores y dinos cuál es tu favorito en comentarios 👇\n\nDisponible desde hoy en tienda y online.\n\n#otoño #nuevacoleccion #diseño @altoyclaro';
+    fp2.attachments = [
+      { id: 'a8', name: 'fotos.svg', url: './img/demo/foto2.svg', mimeType: 'image/svg+xml' },
+      { id: 'b3', name: 'color2.svg', url: './img/demo/foto1.svg', mimeType: 'image/svg+xml' },
+      { id: 'b4', name: 'color3.svg', url: './img/demo/foto3.svg', mimeType: 'image/svg+xml' }
+    ];
+    cards.splice(12, 0, card('Vídeo TikTok receta rápida', 'L2', iso(2, 13), null, ['l6', 'l9', 'l8'], ['m3']));
+    var tk = cards[12];
+    tk.desc = 'Receta en 30 segundos 🌸 ¿La probáis? #receta #fyp';
+    tk.attachments = [{ id: 'b5', name: 'receta.mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', mimeType: 'video/mp4', isUpload: true, bytes: 1100000 }];
+    tk.desc = '📅 **Publicación:** 20/11/2026 13:00\n📌 **Estado:** Pendiente\n\n---\n\n## ✍️ Contenido / Copy\n\nReceta en 30 segundos 🌸 ¿La probáis? #receta #fyp\n\n---\n\n## ✍️ Copy · TikTok\n\nPOV: tienes 30 segundos y hambre 🌸 #receta #fyp #parati';
+
     cards[cards.length - 2].isTemplate = true;
     var store = {};
     var renderFn = null;
@@ -146,7 +176,7 @@
             if (method === 'GET' && (mm = g.match(/^\/cards\/([^/]+)$/))) {
               cc = cards.filter(function (x) { return x.id === mm[1]; })[0];
               var ex = extra[mm[1]] || {};
-              return resolve(Object.assign({}, cc, { checklists: ex.checklists || [], attachments: ex.attachments || [], actions: ex.actions || [] }));
+              return resolve(Object.assign({}, cc, { checklists: ex.checklists || [], attachments: ex.attachments || cc.attachments || [], actions: ex.actions || [] }));
             }
             if ((mm = g.match(/^\/cards\/([^/]+)\/checkItem\/([^/]+)$/))) {
               ((extra[mm[1]] || {}).checklists || []).forEach(function (cl) { cl.checkItems.forEach(function (it) { if (it.id === mm[2]) it.state = body.state; }); });
@@ -168,6 +198,13 @@
               if (method === 'POST') cc[key] = cc[key].concat(pool.filter(function (x) { return x.id === body.value; }));
               else cc[key] = cc[key].filter(function (x) { return x.id !== mm[3]; });
               return resolve([]);
+            }
+            if (method === 'DELETE' && (mm = g.match(/^\/cards\/([^/]+)\/attachments\/([^/]+)$/))) {
+              cc = cards.filter(function (x) { return x.id === mm[1]; })[0];
+              var dropA = function (l) { return (l || []).filter(function (x) { return x.id !== mm[2]; }); };
+              if (cc) cc.attachments = dropA(cc.attachments);
+              if (extra[mm[1]]) extra[mm[1]].attachments = dropA(extra[mm[1]].attachments);
+              return resolve({});
             }
             var m = path.match(/^\/cards\/([^/]+)(?:\/customField\/([^/]+)\/item)?$/);
             var c = m && cards.filter(function (x) { return x.id === m[1]; })[0];

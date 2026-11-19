@@ -23,7 +23,7 @@
       return [{
         // Icono a color con la fecha de hoy (sirve igual sobre fondo claro u oscuro).
         icon: { dark: todayIcon(), light: todayIcon() },
-        text: 'Calendario',
+        text: /\/pruebas\//.test(BASE) ? 'Calendario (pruebas)' : 'Calendario',
         condition: 'always',
         callback: openCalendar
       }];

@@ -872,4 +872,6 @@
   } else {
     load();
   }
+  // Pantalla de novedades (js/whatsnew.js). Para quitarla, borra esta línea y ese archivo.
+  if (window.CalWhatsNew) setTimeout(function () { window.CalWhatsNew.maybeShow(t); }, 700);
 })();

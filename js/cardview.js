@@ -6,6 +6,7 @@
   'use strict';
 
   var ctx, card, full, root, busy = 0;
+  var sp = { tab: 'details', net: null, slide: 0, expanded: false, editing: false }; // pestaña y estado de la vista previa
   var $ = function (sel) { return root.querySelector(sel); };
 
   function esc(s) {
@@ -25,19 +26,68 @@
     return d.toLocaleDateString(ctx.locale, { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
       d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' });
   }
-  // Markdown mínimo: enlaces, negrita, cursiva, código y saltos de línea.
-  function md(text) {
-    var h = esc(text || '');
-    h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
-    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-    h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Markdown de Trello: títulos, negrita, cursiva, tachado, listas, citas, separadores,
+  // bloques de código, enlaces, menciones y caracteres escapados (\* \#…).
+  function mdInline(text) {
+    var keep = [];
+    function put(html) { keep.push(html); return '\u0000' + (keep.length - 1) + '\u0000'; }
+    var s = String(text == null ? '' : text);
+    s = s.replace(/`([^`\n]+)`/g, function (m, c) { return put('<code>' + esc(c) + '</code>'); });
+    s = s.replace(/\\([\\`*_{}\[\]()#+\-.!~>|])/g, function (m, c) { return put(esc(c)); });
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function (m, t, u) {
+      return put('<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(t) + '</a>');
+    });
+    s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, function (m, pre, u) {
+      return pre + put('<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(u) + '</a>');
+    });
+    var h = esc(s);
+    h = h.replace(/\*\*(?=\S)([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/(^|[^\w])__(?=\S)([\s\S]+?)__(?!\w)/g, '$1<strong>$2</strong>');
+    h = h.replace(/~~(?=\S)([\s\S]+?)~~/g, '<del>$1</del>');
+    h = h.replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?![*\w])/g, '$1<em>$2</em>');
+    h = h.replace(/(^|[^\w])_(?=\S)([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>');
     h = h.replace(/(^|[\s(>])@([a-z0-9_]{2,})/gi, function (all, pre, u) {
       var m = memberByUsername(u);
       return pre + '<span class="cv-mention"' + (m ? ' title="' + esc(m.fullName) + '"' : '') + '>@' + u + '</span>';
     });
-    return h.replace(/\n/g, '<br>');
+    for (var i = 0; i < 3 && h.indexOf('\u0000') !== -1; i++) {
+      h = h.replace(/\u0000(\d+)\u0000/g, function (m, n) { return keep[+n]; });
+    }
+    return h;
+  }
+  function md(text) {
+    var lines = String(text || '').replace(/\r\n?/g, '\n').split('\n'), out = [], para = [], i = 0;
+    function flush() { if (para.length) { out.push('<p>' + para.map(mdInline).join('<br>') + '</p>'); para = []; } }
+    var LIST = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+    while (i < lines.length) {
+      var l = lines[i], m;
+      if (/^\s*```/.test(l)) {
+        flush(); var code = []; i++;
+        while (i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i++]);
+        out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>'); i++; continue;
+      }
+      if (!l.trim()) { flush(); i++; continue; }
+      if (/^\s*(-\s*){3,}$|^\s*(\*\s*){3,}$|^\s*(_\s*){3,}$/.test(l)) { flush(); out.push('<hr>'); i++; continue; }
+      if ((m = l.match(/^\s*(#{1,6})\s+(.*?)\s*#*\s*$/))) {
+        flush(); out.push('<h' + m[1].length + ' class="cv-md-h">' + mdInline(m[2]) + '</h' + m[1].length + '>'); i++; continue;
+      }
+      if (/^\s*>/.test(l)) {
+        flush(); var q = [];
+        while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
+        out.push('<blockquote>' + md(q.join('\n')) + '</blockquote>'); continue;
+      }
+      if ((m = l.match(LIST))) {
+        flush(); var ordered = /\d/.test(m[2]), items = [];
+        while (i < lines.length && (m = lines[i].match(LIST)) && /\d/.test(m[2]) === ordered) {
+          var lvl = Math.min(3, Math.floor(m[1].replace(/\t/g, '  ').length / 2));
+          items.push('<li' + (lvl ? ' style="margin-left:' + (lvl * 18) + 'px"' : '') + '>' + mdInline(m[3]) + '</li>'); i++;
+        }
+        out.push((ordered ? '<ol>' : '<ul>') + items.join('') + (ordered ? '</ol>' : '</ul>')); continue;
+      }
+      para.push(l); i++;
+    }
+    flush();
+    return out.join('');
   }
   function avatar(m, size) {
     var s = size || 28;
@@ -103,9 +153,39 @@
           return '<option value="' + esc(l.id) + '"' + (l.id === card.idList ? ' selected' : '') + '>' + esc(l.name) + '</option>';
         }).join('') + '</select>'
       : '<strong>' + esc((lists.filter(function (l) { return l.id === card.idList; })[0] || {}).name || '') + '</strong>') + '</div>';
+    h += '<div class="cv-actbar">';
+    if (!w) h += '<button class="btn cv-sm primary" data-act="auth">Autorizar edición</button>';
+    if (w && card.due) h += '<button class="btn cv-sm" data-act="toggle-done">' + (card.dueComplete ? '↺ Marcar pendiente' : '✓ Marcar completada') + '</button>';
+    h += '<button class="btn cv-sm" data-act="trello">Abrir en Trello ↗</button>';
+    h += '<button class="btn cv-sm" data-act="copy">Copiar enlace</button>';
+    h += '</div>';
     h += '</div>';
 
+    // Pestañas: Detalles / Vista previa en redes (solo si hay etiquetas de red)
+    var nets = window.CalSocial ? CalSocial.detect(card) : [];
+    if (!nets.length) sp.tab = 'details';
+    if (nets.length) {
+      h += '<div class="cv-tabs" role="tablist">' +
+        '<button role="tab" class="cv-tab' + (sp.tab === 'details' ? ' on' : '') + '" aria-selected="' + (sp.tab === 'details') + '" data-act="cv-tab" data-tab="details">Detalles</button>' +
+        '<button role="tab" class="cv-tab' + (sp.tab === 'preview' ? ' on' : '') + '" aria-selected="' + (sp.tab === 'preview') + '" data-act="cv-tab" data-tab="preview">Vista previa en redes' +
+        '<span class="cv-tab-n">' + esc(nets.map(function (d) { return d.label; }).join(', ')) + '</span></button></div>';
+    }
+
     h += '<div class="cv-body"><div class="cv-main">';
+    if (sp.tab === 'preview') {
+      var bname = ((board && board.name) || 'Tu marca').replace(/\s*\(.*?\)\s*/g, ' ').trim();
+      h += CalSocial.render({
+        card: card, attachments: attachments, key: sp.net, slide: sp.slide, expanded: sp.expanded, editing: sp.editing,
+        kindOf: kindOf, bestPreview: bestPreview, esc: esc,
+        when: card.due ? fmtDateTime(card.due) : 'Sin fecha',
+        whenShort: card.due ? new Date(card.due).toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' }) : '',
+        account: {
+          name: bname,
+          handle: bname.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'tumarca',
+          initials: bname.split(/\s+/).map(function (x) { return x.charAt(0); }).join('').slice(0, 2).toUpperCase()
+        }
+      });
+    } else {
 
     // Miembros / Etiquetas / Fechas
     h += '<div class="cv-meta">';
@@ -152,31 +232,12 @@
     // Descripción
     h += '<section class="cv-sec"><div class="cv-sec-h"><h3>Descripción</h3>' +
       (w ? '<button class="btn cv-sm" data-act="edit-desc">Editar</button>' : '') + '</div>' +
-      '<div class="cv-desc" data-desc>' + (card.desc ? md(card.desc) : '<span class="cv-muted">' +
+      '<div class="cv-desc cv-md" data-desc>' + (card.desc ? md(card.desc) : '<span class="cv-muted">' +
         (w ? 'Añade una descripción más detallada…' : 'Sin descripción') + '</span>') + '</div>' +
       (w ? '<div class="cv-desc-edit" hidden><textarea rows="6" data-mention>' + esc(card.desc || '') + '</textarea>' +
         '<div class="cv-actions"><button class="btn primary cv-sm" data-act="save-desc">Guardar</button>' +
         '<button class="btn cv-sm" data-act="cancel-desc">Cancelar</button></div></div>' : '') +
       '</section>';
-
-    // Checklists
-    checklists.forEach(function (cl) {
-      var items = (cl.checkItems || []).slice().sort(function (a, b) { return a.pos - b.pos; });
-      var done = items.filter(function (i) { return i.state === 'complete'; }).length;
-      var pct = items.length ? Math.round(done * 100 / items.length) : 0;
-      h += '<section class="cv-sec"><div class="cv-sec-h"><h3>☑ ' + esc(cl.name) + '</h3></div>' +
-        '<div class="cv-prog"><span>' + pct + '%</span><div><i style="width:' + pct + '%"' + (pct === 100 ? ' class="full"' : '') + '></i></div></div>' +
-        items.map(function (it) {
-          return '<label class="cv-item' + (it.state === 'complete' ? ' done' : '') + '"><input type="checkbox" data-check="' + esc(it.id) +
-            '" data-cl="' + esc(cl.id) + '"' + (it.state === 'complete' ? ' checked' : '') + (w ? '' : ' disabled') + '><span>' + md(it.name) + '</span></label>';
-        }).join('') +
-        (w ? '<form class="cv-additem" data-cl="' + esc(cl.id) + '"><input type="text" placeholder="Añadir un elemento"><button class="btn cv-sm">Añadir</button></form>' : '') +
-        '</section>';
-    });
-    if (!full && card.badges && card.badges.checkItems && !checklists.some(function (c) { return (c.checkItems || []).length; })) {
-      h += '<section class="cv-sec"><div class="cv-muted">Checklist: ' + card.badges.checkItemsChecked + '/' + card.badges.checkItems +
-        (w ? '' : ' · autoriza el calendario para ver los elementos') + '</div></section>';
-    }
 
     // Adjuntos
     if (attachments.length) {
@@ -206,33 +267,31 @@
       h += '</section>';
     }
 
-    // Comentarios
-    h += '<section class="cv-sec"><div class="cv-sec-h"><h3>Comentarios</h3></div>';
-    if (w) {
-      h += '<form class="cv-comment"><textarea rows="2" data-mention placeholder="Escribe un comentario… (@ para mencionar)"></textarea>' +
-        '<button class="btn primary cv-sm">Guardar</button></form>';
+    // Checklists
+    checklists.forEach(function (cl) {
+      var items = (cl.checkItems || []).slice().sort(function (a, b) { return a.pos - b.pos; });
+      var done = items.filter(function (i) { return i.state === 'complete'; }).length;
+      var pct = items.length ? Math.round(done * 100 / items.length) : 0;
+      h += '<section class="cv-sec"><div class="cv-sec-h"><h3>☑ ' + esc(cl.name) + '</h3></div>' +
+        '<div class="cv-prog"><span>' + pct + '%</span><div><i style="width:' + pct + '%"' + (pct === 100 ? ' class="full"' : '') + '></i></div></div>' +
+        items.map(function (it) {
+          return '<label class="cv-item' + (it.state === 'complete' ? ' done' : '') + '"><input type="checkbox" data-check="' + esc(it.id) +
+            '" data-cl="' + esc(cl.id) + '"' + (it.state === 'complete' ? ' checked' : '') + (w ? '' : ' disabled') + '><span>' + mdInline(it.name) + '</span></label>';
+        }).join('') +
+        (w ? '<form class="cv-additem" data-cl="' + esc(cl.id) + '"><input type="text" placeholder="Añadir un elemento"><button class="btn cv-sm">Añadir</button></form>' : '') +
+        '</section>';
+    });
+    if (!full && card.badges && card.badges.checkItems && !checklists.some(function (c) { return (c.checkItems || []).length; })) {
+      h += '<section class="cv-sec"><div class="cv-muted">Checklist: ' + card.badges.checkItemsChecked + '/' + card.badges.checkItems +
+        (w ? '' : ' · autoriza el calendario para ver los elementos') + '</div></section>';
     }
-    if (full) {
-      h += comments.length ? comments.map(function (a) {
-        var m = a.memberCreator || {};
-        return '<div class="cv-cmt">' + avatar(m, 26) + '<div><div class="cv-cmt-h"><strong>' + esc(m.fullName || '') + '</strong>' +
-          '<span class="cv-muted">' + esc(fmtDateTime(a.date)) + '</span></div><div class="cv-cmt-b">' + md(a.data && a.data.text) + '</div></div></div>';
-      }).join('') : '<div class="cv-muted">Sin comentarios.</div>';
-    } else if (!w) {
-      h += '<div class="cv-muted">' + ((card.badges && card.badges.comments) ? card.badges.comments + ' comentario(s). ' : '') +
-        'Autoriza el calendario para ver y escribir comentarios.</div>';
-    } else {
-      h += '<div class="cv-muted">Cargando…</div>';
+
     }
-    h += '</section>';
 
     h += '</div><aside class="cv-side">';
-    if (!w) h += '<button class="btn primary" data-act="auth">Autorizar edición</button>';
-    if (w && card.due) h += '<button class="btn" data-act="toggle-done">' + (card.dueComplete ? '↺ Marcar pendiente' : '✓ Marcar completada') + '</button>';
-    h += '<button class="btn" data-act="trello">Abrir en Trello ↗</button>';
-    h += '<button class="btn" data-act="copy">Copiar enlace</button>';
     if (attachments.length) {
-      h += '<div class="cv-side-att"><div class="cv-h">Adjuntos · ' + attachments.length + '</div>' +
+      h += '<div class="cv-side-att"><div class="cv-side-h"><span class="cv-h">Adjuntos · ' + attachments.length + '</span>' +
+        (attachments.length > 1 ? '<button class="btn cv-sm" data-act="dl-all" title="Descargar todos los adjuntos">↓ Descargar todo</button>' : '') + '</div>' +
         attachments.map(function (a) {
           var k = kindOf(a), ext = ((a.name || a.url || '').match(/\.([a-z0-9]{1,5})(\?|$)/i) || [, ''])[1].toUpperCase();
           var ico = k === 'image'
@@ -244,9 +303,31 @@
             : '<a class="cv-sa-name" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</a>';
           return '<div class="cv-sa">' + ico + '<div class="cv-sa-txt">' + nameEl +
             '<span class="cv-muted">' + (a.bytes ? fmtBytes(a.bytes) : (a.isUpload === false ? 'Enlace' : '')) + '</span></div>' +
-            '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a></div>';
+            '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a>' +
+            (w ? '<button class="cv-sa-del" data-act="del-att" data-att="' + esc(a.id) + '" title="Eliminar ' + esc(a.name) + '" aria-label="Eliminar">' +
+              '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>' : '') + '</div>';
         }).join('') + '</div>';
     }
+    // Comentarios
+    h += '<section class="cv-side-cmts"><div class="cv-side-h"><span class="cv-h">Comentarios' + (full && comments.length ? ' · ' + comments.length : '') + '</span></div>';
+    if (w) {
+      h += '<form class="cv-comment"><textarea rows="2" data-mention placeholder="Escribe un comentario… (@ para mencionar)"></textarea>' +
+        '<button class="btn primary cv-sm">Enviar</button></form>';
+    }
+    if (full) {
+      h += comments.length ? comments.map(function (a) {
+        var m = a.memberCreator || {};
+        return '<div class="cv-cmt">' + avatar(m, 26) + '<div><div class="cv-cmt-h"><strong>' + esc(m.fullName || '') + '</strong>' +
+          '<span class="cv-muted">' + esc(fmtDateTime(a.date)) + '</span></div><div class="cv-cmt-b cv-md">' + md(a.data && a.data.text) + '</div></div></div>';
+      }).join('') : '<div class="cv-muted">Sin comentarios.</div>';
+    } else if (!w) {
+      h += '<div class="cv-muted">' + ((card.badges && card.badges.comments) ? card.badges.comments + ' comentario(s). ' : '') +
+        'Autoriza el calendario para ver y escribir comentarios.</div>';
+    } else {
+      h += '<div class="cv-muted">Cargando…</div>';
+    }
+    h += '</section>';
+
     h += '</aside></div>';
 
     closeMention();
@@ -309,15 +390,24 @@
   }
   var mediaCacheSync = {};
   function hydrateMedia(attachments) {
-    root.querySelectorAll('img[data-media]').forEach(function (img) {
+    root.querySelectorAll('img[data-media], video[data-media]').forEach(function (img) {
       var a = attById(img.getAttribute('data-media'));
       if (!a) return;
       var box = img.parentNode;
       box.classList.add('loading');
+      firstFrame(img);
       loadInto(img, a, img.getAttribute('data-size'),
         function () { box.classList.remove('loading'); },
         function () { mediaFail(img, a, a.isUpload !== false && !ctx.canWrite()); });
     });
+  }
+  // Vídeos de la vista previa: enseña el primer fotograma en cuanto hay datos.
+  function firstFrame(v) {
+    if (v.tagName !== 'VIDEO') return;
+    v.addEventListener('loadedmetadata', function () { if (v.paused && v.currentTime === 0) { try { v.currentTime = 0.1; } catch (e) {} } }, { once: true });
+  }
+  function spCount(ta) {
+    var c = $('[data-sp-count]'); if (c) c.textContent = ta.value.trim().length.toLocaleString('es-ES') + ' caracteres';
   }
   function mediaFail(img, a, needAuth) {
     var box = img.parentNode;
@@ -473,9 +563,32 @@
       else if (act === 'trello') ctx.openInTrello(card);
       else if (act === 'auth') ctx.askAuth('Autoriza una vez el calendario para editar tarjetas.');
       else if (act === 'copy') copyLink();
+      else if (act === 'cv-tab') { sp.tab = b.getAttribute('data-tab'); paint(); }
+      else if (act === 'dl-all') downloadAll();
+      else if (act === 'del-att') deleteAttachment(b.getAttribute('data-att'));
+      else if (act === 'sp-net') { sp.net = b.getAttribute('data-net'); sp.slide = 0; sp.expanded = false; sp.editing = false; paint(); }
+      else if (act === 'sp-play') { if (b.paused) b.play().catch(function () {}); else b.pause(); b.parentNode.classList.toggle('playing', !b.paused); }
+      else if (act === 'sp-edit') {
+        if (!needWrite()) return;
+        sp.editing = true; paint();
+        var sta = $('[data-sp-copy]'); if (sta) { sta.focus(); spCount(sta); }
+      }
+      else if (act === 'sp-cancel') { sp.editing = false; paint(); }
+      else if (act === 'sp-save' || act === 'sp-reset') {
+        var cur = CalSocial.current(card, sp.net), nm = CalSocial.NETS[cur.net].name;
+        if (act === 'sp-reset' && !confirm('¿Quitar el copy propio de ' + nm + ' y volver a usar el copy general?')) return;
+        var val = act === 'sp-save' ? $('[data-sp-copy]').value : '';
+        var nd = CalSocial.setCopy(card.desc || '', cur.net, val);
+        sp.editing = false;
+        save('PUT', '/cards/' + card.id, { desc: nd }, function (c) { c.desc = nd; },
+          val.trim() ? 'Copy de ' + nm + ' guardado' : 'Ahora ' + nm + ' usa el copy general');
+      }
+      else if (act === 'sp-slide') { sp.slide = +b.getAttribute('data-to'); paint(); }
+      else if (act === 'sp-more') { sp.expanded = true; paint(); }
       else if (act === 'lightbox') openLightbox(b.getAttribute('data-att'));
       else if (act === 'play') playVideo(b.getAttribute('data-att'));
       else if (act === 'play-side') {
+        if (sp.tab !== 'details') { sp.tab = 'details'; paint(); }
         var vid = root.querySelector('[data-vid="' + b.getAttribute('data-att') + '"]');
         if (vid) { vid.scrollIntoView({ behavior: 'smooth', block: 'center' }); playVideo(b.getAttribute('data-att')); }
       }
@@ -566,6 +679,7 @@
     });
     root.addEventListener('input', function (e) {
       if (e.target.classList.contains('cv-title')) autosize(e.target);
+      if (e.target.hasAttribute && e.target.hasAttribute('data-sp-copy')) spCount(e.target);
       if (e.target.hasAttribute && e.target.hasAttribute('data-mention')) { mm.sel = mm.ta === e.target ? mm.sel : 0; updateMention(e.target); }
     });
     root.addEventListener('keyup', function (e) {
@@ -623,6 +737,41 @@
     });
     paint();
   }
+  function deleteAttachment(id) {
+    var a = attById(id);
+    if (!a || !needWrite()) return;
+    if (!confirm('¿Eliminar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nSe borra también en Trello y no se puede deshacer.')) return;
+    var cid = card.id;
+    setBusy(true);
+    ctx.api('DELETE', '/cards/' + cid + '/attachments/' + id).then(function () {
+      var drop = function (list) { return (list || []).filter(function (x) { return x.id !== id; }); };
+      if (full && full.attachments) full.attachments = drop(full.attachments);
+      if (card && card.id === cid) {
+        if (card.attachments) card.attachments = drop(card.attachments);
+        if (card.cover && card.cover.idAttachment === id) card.cover = null;
+        if (card.badges && card.badges.attachments) card.badges.attachments--;
+        sp.slide = 0;
+        paint(); ctx.onChange(card);
+      }
+      ctx.toast('Adjunto eliminado');
+    }).catch(function (err) {
+      ctx.toast('No se pudo eliminar: ' + (err && err.message ? err.message : err), true);
+    }).then(function () { setBusy(false); });
+  }
+  // Descarga todos los adjuntos, uno detrás de otro, igual que el botón ↓ de cada uno.
+  // El navegador puede pedir permiso para "descargar varios archivos" o para abrir ventanas emergentes.
+  function downloadAll() {
+    var atts = (full && full.attachments) || card.attachments || [];
+    if (!atts.length) return;
+    atts.forEach(function (a, i) {
+      setTimeout(function () {
+        var el = document.createElement('a');
+        el.href = dlUrl(a); el.download = a.name || ''; el.target = '_blank'; el.rel = 'noopener';
+        document.body.appendChild(el); el.click(); el.remove();
+      }, i * 350);
+    });
+    ctx.toast('Descargando ' + atts.length + ' adjuntos… Si solo baja uno, permite las descargas múltiples o las ventanas emergentes en el navegador.');
+  }
   function copyLink() {
     var url = card.shortUrl || card.url;
     var ok = function () { ctx.toast('Enlace copiado'); };
@@ -655,7 +804,7 @@
 
   // ───────────────────────── API pública ─────────────────────────
   function open(c) {
-    card = c; full = null;
+    card = c; full = null; sp = { tab: 'details', net: null, slide: 0, expanded: false, editing: false };
     root.hidden = false;
     paint();
     loadFull();
