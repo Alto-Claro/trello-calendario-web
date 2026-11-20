@@ -303,7 +303,9 @@
             : '<a class="cv-sa-name" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</a>';
           return '<div class="cv-sa">' + ico + '<div class="cv-sa-txt">' + nameEl +
             '<span class="cv-muted">' + (a.bytes ? fmtBytes(a.bytes) : (a.isUpload === false ? 'Enlace' : '')) + '</span></div>' +
-            '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a>' +
+            (viaWorker(a)
+              ? '<button class="cv-sa-dl" data-act="dl-one" data-att="' + esc(a.id) + '" title="Descargar ' + esc(a.name) + '" aria-label="Descargar">↓</button>'
+              : '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a>') +
             (w ? '<button class="cv-sa-del" data-act="del-att" data-att="' + esc(a.id) + '" title="Eliminar ' + esc(a.name) + '" aria-label="Eliminar">' +
               '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>' : '') + '</div>';
         }).join('') + '</div>';
@@ -565,6 +567,7 @@
       else if (act === 'copy') copyLink();
       else if (act === 'cv-tab') { sp.tab = b.getAttribute('data-tab'); paint(); }
       else if (act === 'dl-all') downloadAll();
+      else if (act === 'dl-one') { var oa = attById(b.getAttribute('data-att')); if (oa) workerDownload([oa], false); }
       else if (act === 'del-att') deleteAttachment(b.getAttribute('data-att'));
       else if (act === 'sp-net') { sp.net = b.getAttribute('data-net'); sp.slide = 0; sp.expanded = false; sp.editing = false; paint(); }
       else if (act === 'sp-play') { if (b.paused) b.play().catch(function () {}); else b.pause(); b.parentNode.classList.toggle('playing', !b.paused); }
@@ -758,11 +761,45 @@
       ctx.toast('No se pudo eliminar: ' + (err && err.message ? err.message : err), true);
     }).then(function () { setBusy(false); });
   }
-  // Descarga todos los adjuntos, uno detrás de otro, igual que el botón ↓ de cada uno.
-  // El navegador puede pedir permiso para "descargar varios archivos" o para abrir ventanas emergentes.
+  // ───── Descargas ─────
+  // Trello no deja descargar los adjuntos subidos desde una página de fuera, solo abrirlos.
+  // Con el intermediario (ctx.downloadBase, carpeta worker/) se descargan de verdad.
+  function viaWorker(a) { return !!(ctx.downloadBase && ctx.downloadBase()) && a.isUpload !== false; }
+  function workerDownload(list, all) {
+    var base = ctx.downloadBase();
+    if (!ctx.canWrite()) { ctx.askAuth('Para descargar adjuntos desde el calendario, autoriza una vez el calendario.'); return; }
+    // La pestaña se abre ya (dentro del clic) para que el navegador no la bloquee; luego se le da la dirección.
+    var w = window.open('', '_blank');
+    if (w) { try { w.document.write('<meta charset="utf-8"><title>Descargando…</title><p style="font:15px sans-serif;margin:40px">Preparando la descarga…</p>'); } catch (e) {} }
+    var files = list.map(function (a) {
+      var m = String(a.url || '').match(/\/download\/([^?#]+)/);
+      return { card: card.id, att: a.id, name: m ? decodeURIComponent(m[1]) : (a.name || 'archivo') };
+    });
+    ctx.authHeader().then(function (auth) {
+      if (!auth) throw new Error('Falta la autorización');
+      return fetch(base + '/ticket', { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ files: files }) });
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (x) { throw new Error(x || ('HTTP ' + r.status)); });
+      return r.json();
+    }).then(function (res) {
+      var url = base + (all ? '/all?t=' : '/dl?t=') + encodeURIComponent(res.ticket) + (all ? '' : '&i=0');
+      if (w) { try { w.opener = null; } catch (e) {} w.location.href = url; } else window.open(url, '_blank', 'noopener');
+      if (all) ctx.toast('Descargando ' + files.length + ' adjuntos en una pestaña nueva. Si el navegador pregunta, permite descargar varios archivos.');
+    }).catch(function (err) {
+      if (w) try { w.close(); } catch (e) {}
+      ctx.toast('No se pudo preparar la descarga: ' + (err && err.message ? err.message : err), true);
+    });
+  }
+  // Sin intermediario: abre cada adjunto (el navegador decide si lo descarga o lo muestra).
   function downloadAll() {
     var atts = (full && full.attachments) || card.attachments || [];
     if (!atts.length) return;
+    var up = atts.filter(viaWorker), links = atts.filter(function (a) { return !viaWorker(a); });
+    if (up.length) {
+      workerDownload(up, true);
+      if (links.length) ctx.toast(links.length + ' adjunto(s) son enlaces y no se descargan; ábrelos desde la lista.');
+      return;
+    }
     atts.forEach(function (a, i) {
       setTimeout(function () {
         var el = document.createElement('a');
@@ -770,7 +807,7 @@
         document.body.appendChild(el); el.click(); el.remove();
       }, i * 350);
     });
-    ctx.toast('Descargando ' + atts.length + ' adjuntos… Si solo baja uno, permite las descargas múltiples o las ventanas emergentes en el navegador.');
+    ctx.toast('Abriendo ' + atts.length + ' adjuntos… Si se abren en pestañas, guárdalos con ⌘S.');
   }
   function copyLink() {
     var url = card.shortUrl || card.url;

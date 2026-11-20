@@ -635,6 +635,13 @@
     window.CalCardView.init({
       api: apiRequest,
       mediaUrl: mediaUrl,
+      // Descargas reales a través del intermediario (worker/). Sin DOWNLOAD_URL o en el demo, no se usa.
+      downloadBase: function () { return t.__mockWrite ? '' : String(C.DOWNLOAD_URL || '').replace(/\/+$/, ''); },
+      authHeader: function () {
+        return getToken().then(function (tok) {
+          return tok ? 'OAuth oauth_consumer_key="' + C.APP_KEY + '", oauth_token="' + tok + '"' : null;
+        });
+      },
       canWrite: function () { return state.canWrite; },
       askAuth: function (msg) { askAuth(msg); },
       board: function () { return state.board; },
