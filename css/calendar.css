@@ -568,3 +568,4 @@ body.detail .events { overflow: visible; }
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .cv-sa-del:hover { background: var(--danger); color: #fff; }
+button.cv-sa-dl { border: 0; cursor: pointer; font: inherit; font-weight: 700; }

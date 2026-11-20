@@ -8,5 +8,7 @@
 window.CAL_CONFIG = {
   APP_KEY: '2c8facb41c1492bf259d70ee05a7b1ae',          // ← pega aquí tu API key
   APP_NAME: 'Calendario Libre',
-  APP_AUTHOR: 'Alto y Claro'
+  APP_AUTHOR: 'Alto y Claro',
+  // Intermediario de descargas (carpeta worker/, Cloudflare). Vacío = los adjuntos solo se abren.
+  DOWNLOAD_URL: 'https://calendario-descargas.altoyclaro.workers.dev'
 };
