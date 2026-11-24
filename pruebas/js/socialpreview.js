@@ -55,13 +55,15 @@
   }
 
   // ───── Copy por red, guardado en la descripción de la tarjeta ─────
-  // Sección general:  «## ✍️ Contenido / Copy» (tarjetas de Loomly) → la usan todas las redes.
+  // Sección general:  «## ✍️ Contenido / Copy» → la usan todas las redes.
   // Sección por red:  «## ✍️ Copy · Instagram» → solo esa red. Cada sección acaba en el siguiente
   // separador (---) o el siguiente título. Si no hay ninguna sección, el copy es toda la descripción.
   var NET_WORDS = {
     instagram: /\b(instagram|ig)\b/i, facebook: /\b(facebook|fb)\b/i, tiktok: /\b(tik\s?tok|tt)\b/i,
     youtube: /\b(you\s?tube|yt)\b/i, linkedin: /\blinked\s?in\b/i, x: /\b(twitter|x)\b/i
   };
+  // Texto de relleno que ponen algunas importaciones cuando no hay copy (p. ej. «_Sin copy en Loomly._»): se ignora.
+  var PLACEHOLDER = /^\s*[_*]*\s*sin\s+copy\b[^\n]*$/i;
   var HEADING = /^\s*#{1,6}\s/, SEP = /^\s*(---+|\*\*\*+|___+)\s*$/;
   function sections(md) {
     var lines = String(md || '').split('\n'), out = [];
@@ -71,7 +73,7 @@
       ORDER.forEach(function (id) { if (!net && NET_WORDS[id].test(lines[i])) net = id; });
       var j = i + 1;
       while (j < lines.length && !SEP.test(lines[j]) && !HEADING.test(lines[j])) j++;
-      out.push({ net: net, head: i, start: i + 1, end: j, text: lines.slice(i + 1, j).join('\n').trim() });
+      out.push({ net: net, head: i, start: i + 1, end: j, text: lines.slice(i + 1, j).filter(function (l) { return !PLACEHOLDER.test(l); }).join('\n').trim() });
     }
     return { lines: lines, list: out };
   }
@@ -144,7 +146,7 @@
     if (o.kindOf(a) === 'video') {
       if (a.drive) {
         return '<img data-media="' + o.esc(a.id) + '" data-size="cover" alt="' + o.esc(a.name || '') + '">' +
-          '<button class="sp-vbadge" data-act="drive-view" data-att="' + o.esc(a.id) + '" aria-label="Reproducir en Drive">▶</button>';
+          '<button class="sp-vbadge" data-act="drive-view" data-att="' + o.esc(a.id) + '" aria-label="Reproducir">▶</button>';
       }
       if (a.isUpload === false) {
         var pv = o.bestPreview(a);

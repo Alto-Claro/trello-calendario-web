@@ -20,7 +20,7 @@
     { ico: '📱', t: 'Vista previa lado a lado',
       d: 'Todas las redes a la vez, el copy se edita con la vista previa en directo y hay una revisión antes de publicar.' },
     { ico: '⬆️', t: 'Sube archivos arrastrando o pegando',
-      d: 'Suéltalos en la tarjeta o pégalos con ⌘V. Hasta 10 MB van a Trello; los más grandes, a Google Drive.' }
+      d: 'Suéltalos en la tarjeta o pégalos con ⌘V. También los vídeos grandes.' }
   ];
 
   var CSS = '' +

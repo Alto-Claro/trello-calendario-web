@@ -452,12 +452,12 @@
     var canUp = w && ((upInfo && upInfo.ok) || bigToDrive()), myUps = uploads.filter(function (u) { return u.card === card.id; });
     h += '<section class="cv-files"><div class="cv-side-h"><h3>Archivos' + (attachments.length ? ' <span class="cv-muted">' + attachments.length + '</span>' : '') + '</h3><span class="cv-side-btns">' +
       (attachments.length > 1 ? '<button class="btn cv-sm" data-act="dl-all" title="Descargar todos los adjuntos">⤓ Todo</button>' : '') +
-      (canUp ? '<button class="btn cv-sm" data-act="upload" title="Subir archivos (los de más de ' + TRELLO_MAX_MB + ' MB se guardan en ' + (bigToDrive() ? 'Google Drive' : 'Cloudflare') + ')">+ Subir</button>' : '') + '</span></div>';
+      (canUp ? '<button class="btn cv-sm" data-act="upload" title="Subir archivos">+ Subir</button>' : '') + '</span></div>';
     h += myUps.map(function (u) {
       return '<div class="cv-up' + (u.err ? ' err' : '') + '" data-up="' + u.id + '"><div class="cv-up-t"><span title="' + esc(u.name) + '">' + esc(u.name) + '</span>' +
         '<span class="cv-muted" data-up-pct>' + (u.err ? esc(u.err) : upLabel(u)) + '</span></div>' +
         (u.err ? '<button class="cv-sa-del" data-act="up-dismiss" data-up="' + u.id + '" aria-label="Quitar">×</button>'
-          : u.wait ? '<button class="btn primary cv-sm" data-act="drive-connect">Conectar Google Drive</button>' +
+          : u.wait ? '<button class="btn primary cv-sm" data-act="drive-connect">Permitir subida</button>' +
             '<button class="cv-sa-del" data-act="up-dismiss" data-up="' + u.id + '" aria-label="Cancelar">×</button>'
           : '<div class="cv-up-bar"><i style="width:' + Math.round(u.pct * 100) + '%"></i></div>') + '</div>';
     }).join('');
@@ -467,14 +467,14 @@
         var k = kindOf(a), df = driveFile(a), ext = ((a.name || a.url || '').match(/\.([a-z0-9]{1,5})(\?|$)/i) || [, ''])[1].toUpperCase();
         var thumb = k === 'image' || df || (k === 'video' && bestPreview(a));
         var open = k === 'image' ? 'lightbox' : df ? 'drive-view' : k === 'video' ? 'play-v' : 'open-url';
-        var meta = a.bytes ? fmtBytes(a.bytes) : (a.drive ? 'Google Drive' : a.r2 ? 'Cloudflare' : (a.isUpload === false ? 'Enlace' : ''));
+        var meta = a.bytes ? fmtBytes(a.bytes) : (a.drive || a.r2 ? '' : (a.isUpload === false ? 'Enlace' : ''));
         var dl = a.drive && !driveDl(a)
-          ? '<a class="cv-fa" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="Abrir en Google Drive">↗</a>'
+          ? '<a class="cv-fa" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="Abrir">↗</a>'
           : viaWorker(a) ? '<button class="cv-fa" data-act="dl-one" data-att="' + esc(a.id) + '" title="Descargar">↓</button>'
           : '<a class="cv-fa" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar">↓</a>';
         return '<div class="cv-file' + (a.id === cov ? ' is-cover' : '') + '">' +
           '<button class="cv-fth k-' + k + '" data-act="' + open + '" data-att="' + esc(a.id) + '" title="' + esc(a.name) + '">' +
-          (thumb ? '<img data-media="' + esc(a.id) + '" data-size="thumb" alt="">' : '<span class="cv-fext">' + (a.drive ? 'DRIVE' : esc(ext || 'FILE')) + '</span>') +
+          (thumb ? '<img data-media="' + esc(a.id) + '" data-size="thumb" alt="">' : '<span class="cv-fext">' + esc(ext || 'FILE') + '</span>') +
           (k === 'video' ? '<span class="cv-fplay">▶</span>' : '') + (a.id === cov ? '<span class="cv-fcov">Portada</span>' : '') + '</button>' +
           '<div class="cv-fn" title="' + esc(a.name) + '">' + esc(a.name || a.url) + '<small>' + esc(meta) + '</small></div>' +
           '<div class="cv-facts">' + dl +
@@ -484,7 +484,7 @@
           '</div></div>';
       }).join('') + '</div>';
     }
-    if (canUp) h += '<div class="cv-drop" data-act="upload">Suelta archivos aquí o pega con <kbd>⌘V</kbd>' + (bigToDrive() ? ' · más de ' + TRELLO_MAX_MB + ' MB → Google Drive' : '') + '</div>';
+    if (canUp) h += '<div class="cv-drop" data-act="upload">Suelta archivos aquí o pega con <kbd>⌘V</kbd></div>';
     else if (!attachments.length) h += '<div class="cv-muted">Sin archivos.</div>';
     h += '</section>';
 
@@ -689,15 +689,15 @@
     if (!dv) {
       dv = document.createElement('div');
       dv.className = 'cv-lb cv-dv';
-      dv.innerHTML = '<div class="cv-dv-box"><div class="cv-dv-h"><span></span><a target="_blank" rel="noopener">Abrir en Drive ↗</a>' +
+      dv.innerHTML = '<div class="cv-dv-box"><div class="cv-dv-h"><span></span><a target="_blank" rel="noopener">Abrir en otra pestaña ↗</a>' +
         '<button class="cv-lb-x" aria-label="Cerrar">×</button></div><iframe allow="autoplay; fullscreen" allowfullscreen></iframe>' +
-        '<p class="cv-dv-tip">¿No se ve? Inicia sesión en Google en este navegador o ábrelo en Drive. Los vídeos recién subidos tardan unos minutos en estar listos.</p></div>';
+        '<p class="cv-dv-tip">¿No se ve? Ábrelo en otra pestaña. Los vídeos recién subidos tardan unos minutos en estar listos.</p></div>';
       document.body.appendChild(dv);
       var closeDv = function () { dv.hidden = true; dv.querySelector('iframe').src = 'about:blank'; };
       dv.addEventListener('click', function (e) { if (e.target === dv || e.target.closest('.cv-lb-x')) closeDv(); });
       document.addEventListener('keydown', function (e) { if (dv && !dv.hidden && e.key === 'Escape') { e.stopPropagation(); closeDv(); } }, true);
     }
-    dv.querySelector('.cv-dv-h span').textContent = a.name || 'Google Drive';
+    dv.querySelector('.cv-dv-h span').textContent = a.name || 'Archivo';
     dv.querySelector('.cv-dv-h a').href = a.url;
     dv.querySelector('iframe').src = window.CalDrive.viewUrl(a.drive.id);
     dv.hidden = false;
@@ -1236,7 +1236,7 @@
     var a = attById(id);
     if (!a || !needWrite()) return;
     if (!confirm(a.drive
-      ? '¿Quitar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nEl archivo seguirá en Google Drive.'
+      ? '¿Quitar «' + (a.name || 'este adjunto') + '» de la tarjeta?'
       : '¿Eliminar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nSe borra también en Trello y no se puede deshacer.')) return;
     var cid = card.id;
     setBusy(true);
@@ -1329,9 +1329,8 @@
       .catch(function () { upInfo = { ok: false }; });
   }
   function upLabel(u) {
-    if (u.wait) return fmtBytes(u.size) + ' · se guardará en Google Drive';
-    return u.pct >= 1 ? 'Guardando en la tarjeta…' : Math.round(u.pct * 100) + '% de ' + fmtBytes(u.size) +
-      (u.dest === 'drive' ? ' · Google Drive' : u.dest === 'r2' ? ' · Cloudflare' : '');
+    if (u.wait) return fmtBytes(u.size) + ' · falta dar permiso para subirlo';
+    return u.pct >= 1 ? 'Guardando en la tarjeta…' : Math.round(u.pct * 100) + '% de ' + fmtBytes(u.size);
   }
   function upPaint(u) {
     var el = root.querySelector('[data-up="' + u.id + '"]');
@@ -1365,7 +1364,7 @@
     window.CalDrive.connect().then(function () {
       uploads.filter(function (u) { return u.wait; }).forEach(function (u) { u.wait = false; startUpload(u); });
       paint();
-    }).catch(function (err) { ctx.toast('Google Drive: ' + (err && err.message ? err.message : err), true); });
+    }).catch(function (err) { ctx.toast('No se pudo subir: ' + (err && err.message ? err.message : err), true); });
   }
   function startUpload(u) {
     var c = u.c, file = u.file;
@@ -1411,7 +1410,7 @@
       onProgress: function (n) { u.pct = Math.min(0.99, n / Math.max(1, file.size)); upPaint(u); }
     }).then(function (f) {
       u.pct = 1; upPaint(u);
-      if (f.shared === 'none') ctx.toast('«' + file.name + '» está en tu Drive pero no se ha compartido: los demás no lo verán hasta que lo compartas.', true);
+      if (f.shared === 'none') ctx.toast('«' + file.name + '» se ha subido, pero no se ha podido compartir: los demás no lo verán.', true);
       return ctx.api('POST', '/cards/' + c.id + '/attachments', { url: f.url, name: file.name, mimeType: f.mimeType });
     });
   }
