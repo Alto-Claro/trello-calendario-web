@@ -569,3 +569,25 @@ body.detail .events { overflow: visible; }
 }
 .cv-sa-del:hover { background: var(--danger); color: #fff; }
 button.cv-sa-dl { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
+
+/* Subidas (Trello o Cloudflare R2) */
+.cv-side-btns { display: inline-flex; gap: 4px; }
+.cv-up { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--line); flex-wrap: wrap; }
+.cv-up-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cv-up-t span:first-child { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-up-t .cv-muted { font-size: 11px; }
+.cv-up-bar { flex-basis: 100%; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 25%, transparent); overflow: hidden; }
+.cv-up-bar i { display: block; height: 100%; background: var(--accent); transition: width .2s; }
+.cv-up.err .cv-muted { color: var(--danger); }
+
+/* Google Drive */
+.cv-thumb.cv-drive { cursor: pointer; }
+.cv-thumb.cv-drive .cv-play-i { bottom: auto; top: calc(50% - 33px); }
+.cv-dv { padding: 24px; }
+.cv-dv-box { width: min(1100px, 100%); height: 100%; display: flex; flex-direction: column; gap: 8px; }
+.cv-dv-h { display: flex; align-items: center; gap: 14px; color: #dcdfe4; font-size: 14px; min-height: 40px; padding-right: 50px; }
+.cv-dv-h span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.cv-dv-h a { color: #85b8ff; white-space: nowrap; }
+.cv-dv iframe { flex: 1; width: 100%; border: 0; border-radius: 6px; background: #111; }
+.cv-dv-tip { margin: 0; color: #9fadbc; font-size: 12px; text-align: center; }
+button.sp-vbadge { border: 0; background: none; padding: 0; cursor: pointer; font-size: 22px; }

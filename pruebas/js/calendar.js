@@ -70,7 +70,7 @@
   function thumbFor(card) {
     var atts = card.attachments || [];
     if (!atts.length) return null;
-    var isImg = function (a) { return /^image\//.test(a.mimeType || '') || IMG_RE.test(a.name || a.url || ''); };
+    var isImg = function (a) { return /^image\//.test(a.mimeType || '') || IMG_RE.test(a.name || a.url || '') || ((a.r2 || a.drive) && a.previews); };
     var cov = card.cover && card.cover.idAttachment && atts.filter(function (a) { return a.id === card.cover.idAttachment; })[0];
     var a = cov || atts.filter(isImg)[0];
     if (!a) return null;
@@ -843,6 +843,7 @@
       checkAuth()
     ]).then(function (r) {
       state.cards = (r[0] || []).filter(function (c) { return !c.closed; });
+      state.cards.forEach(function (c) { (c.attachments || []).forEach(S.fixAtt); });
       window.CalCardView.sync(state.cards);
       state.lists = r[1] || [];
       state.board = r[2] || {};

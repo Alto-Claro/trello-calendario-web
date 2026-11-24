@@ -141,8 +141,14 @@
   function mediaEl(a, o) {
     if (!a) return '<div class="sp-media-ph">Sin imagen ni vídeo adjunto</div>';
     if (o.kindOf(a) === 'video') {
+      if (a.drive) {
+        return '<img data-media="' + o.esc(a.id) + '" data-size="cover" alt="' + o.esc(a.name || '') + '">' +
+          '<button class="sp-vbadge" data-act="drive-view" data-att="' + o.esc(a.id) + '" aria-label="Reproducir en Drive">▶</button>';
+      }
       if (a.isUpload === false) {
-        return '<video src="' + o.esc(a.url) + '" muted loop playsinline autoplay data-act="sp-play"></video><span class="sp-vbadge">▶</span>';
+        var pv = o.bestPreview(a);
+        return '<video src="' + o.esc(a.url) + '"' + (pv ? ' poster="' + o.esc(pv.url) + '"' : '') +
+          ' muted loop playsinline autoplay data-act="sp-play"></video><span class="sp-vbadge">▶</span>';
       }
       // Sin depender de la portada: se carga el propio vídeo y se muestra su primer fotograma.
       return '<video data-media="' + o.esc(a.id) + '" data-size="full" muted loop playsinline preload="metadata" data-act="sp-play"></video>' +
