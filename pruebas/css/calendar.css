@@ -969,3 +969,9 @@ kbd { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
 .cv .cv-main { padding: 14px 20px 30px; }
 .cv-files-g { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .cv-side-split .cv-files { max-height: 55%; min-height: 150px; }
+
+/* ═════ v2.2 · Archivos arriba en la pestaña Contenido ═════ */
+.cv-files-top { margin: 0 0 18px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.cv-files-top .cv-files-g { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.cv-files-top .cv-drop { margin-top: 10px; }
+.cv-side-split.no-files .cv-conv { border-top: 0; padding-top: 0; }

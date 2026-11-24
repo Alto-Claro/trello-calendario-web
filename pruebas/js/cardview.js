@@ -321,9 +321,9 @@
     h += '<div class="cv-body' + (sp.tab === 'preview' ? ' is-preview' : '') + '"><div class="cv-main">';
     if (sp.tab === 'preview') h += previewMain(nets, attachments);
     else if (sp.tab === 'activity') h += activityMain(acts);
-    else h += contentMain(nets, checklists, w);
+    else h += '<div class="cv-files-top">' + filesSection(attachments, w) + '</div>' + contentMain(nets, checklists, w);
     h += '</div><aside class="cv-side">';
-    h += sp.tab === 'preview' ? previewSide(nets, attachments, w) : filesAndConversation(attachments, acts, nComments, w);
+    h += sp.tab === 'preview' ? previewSide(nets, attachments, w) : filesAndConversation(attachments, acts, nComments, w, sp.tab === 'details');
     h += '</aside></div>';
 
     closeMention();
@@ -447,8 +447,14 @@
   }
 
   // ───── Columna derecha: archivos + conversación ─────
-  function filesAndConversation(attachments, acts, nComments, w) {
-    var h = '<div class="cv-side-scroll cv-side-split">';
+  function filesAndConversation(attachments, acts, nComments, w, noFiles) {
+    var h = '<div class="cv-side-scroll cv-side-split' + (noFiles ? ' no-files' : '') + '">';
+    if (!noFiles) h += filesSection(attachments, w);
+    return h + conversation(acts, nComments, w);
+  }
+  // Archivos: en la pestaña Contenido van arriba de la columna izquierda; en Actividad, a la derecha.
+  function filesSection(attachments, w) {
+    var h = '';
     var canUp = w && ((upInfo && upInfo.ok) || bigToDrive()), myUps = uploads.filter(function (u) { return u.card === card.id; });
     h += '<section class="cv-files"><div class="cv-side-h"><h3>Archivos' + (attachments.length ? ' <span class="cv-muted">' + attachments.length + '</span>' : '') + '</h3><span class="cv-side-btns">' +
       (attachments.length > 1 ? '<button class="btn cv-sm" data-act="dl-all" title="Descargar todos los adjuntos">⤓ Todo</button>' : '') +
@@ -487,9 +493,12 @@
     if (canUp) h += '<div class="cv-drop" data-act="upload">Suelta archivos aquí o pega con <kbd>⌘V</kbd></div>';
     else if (!attachments.length) h += '<div class="cv-muted">Sin archivos.</div>';
     h += '</section>';
+    return h;
+  }
 
-    // Conversación: comentarios y movimientos, del más antiguo al más reciente
-    h += '<section class="cv-conv"><div class="cv-side-h"><h3>Conversación' + (full ? ' <span class="cv-muted">' + nComments + ' comentario' + (nComments === 1 ? '' : 's') + '</span>' : '') + '</h3></div>';
+  // Conversación: comentarios y movimientos, del más antiguo al más reciente
+  function conversation(acts, nComments, w) {
+    var h = '<section class="cv-conv"><div class="cv-side-h"><h3>Conversación' + (full ? ' <span class="cv-muted">' + nComments + ' comentario' + (nComments === 1 ? '' : 's') + '</span>' : '') + '</h3></div>';
     if (full) {
       var list = acts.filter(function (a) { return isComment(a) || (a.type === 'updateCard' && a.data && a.data.listAfter) || a.type === 'addAttachmentToCard'; }).slice(0, 40).reverse();
       h += list.length ? list.map(function (a) {
