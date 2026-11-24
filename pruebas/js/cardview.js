@@ -220,30 +220,28 @@
 
     // Barra superior: tablero, navegación entre tarjetas del día y acciones
     var sib = ctx.siblings ? ctx.siblings(card) : null;
-    h += '<div class="cv-top"><span class="cv-crumb">' + esc(ctx.boardName ? ctx.boardName() : '') + '</span>';
+    // Cabecera compacta: título, navegación y acciones en una sola fila
+    h += '<div class="cv-top">' + (w ? '<textarea class="cv-title" rows="1" data-f="name">' + esc(card.name) + '</textarea>'
+           : '<h2 class="cv-title ro">' + esc(card.name) + '</h2>');
     if (sib && sib.ids.length > 1) {
       h += '<span class="cv-navc"><button data-act="nav" data-d="-1" title="Anterior (K)"' + (sib.i === 0 ? ' disabled' : '') + '>‹</button>' +
         '<span>' + (sib.i + 1) + ' de ' + sib.ids.length + ' · ' + esc(sib.label) + '</span>' +
         '<button data-act="nav" data-d="1" title="Siguiente (J)"' + (sib.i === sib.ids.length - 1 ? ' disabled' : '') + '>›</button></span>';
     }
-    h += '<span class="cv-sp"></span>';
     if (!w) h += '<button class="btn primary cv-sm" data-act="auth">Autorizar edición</button>';
-    else if (card.due) h += '<button class="btn cv-sm ' + (card.dueComplete ? '' : 'primary') + '" data-act="toggle-done">' + (card.dueComplete ? '↺ Marcar pendiente' : '✓ Completar') + '</button>';
-    h += '<button class="btn cv-sm" data-act="trello">Abrir en Trello ↗</button>' +
+    else if (card.due) h += '<button class="btn cv-sm ' + (card.dueComplete ? '' : 'primary') + '" data-act="toggle-done">' + (card.dueComplete ? '↺ Pendiente' : '✓ Completar') + '</button>';
+    h += '<button class="btn cv-sm" data-act="trello" title="Abrir en Trello">Trello ↗</button>' +
       '<button class="btn cv-sm icon" data-act="copy" title="Copiar enlace">🔗</button>' +
       '<button class="cv-x" data-act="close" aria-label="Cerrar" title="Cerrar (Esc)">✕</button></div>';
-
-    h += w ? '<textarea class="cv-title" rows="1" data-f="name">' + esc(card.name) + '</textarea>'
-           : '<h2 class="cv-title ro">' + esc(card.name) + '</h2>';
 
     // Propiedades
     var lc = ctx.listColor ? ctx.listColor(card.idList) : 'var(--accent)';
     h += '<div class="cv-props">';
-    h += '<span class="cv-k">◐ Estado</span><span class="cv-v">' + (w
+    h += '<span class="cv-pp"><span class="cv-k">Estado</span><span class="cv-v">' + (w
       ? '<label class="cv-status" style="--lc:' + lc + '"><i></i><select data-f="idList">' + lists.map(function (l) {
           return '<option value="' + esc(l.id) + '"' + (l.id === card.idList ? ' selected' : '') + '>' + esc(l.name) + '</option>';
         }).join('') + '</select>▾</label>'
-      : '<span class="cv-status" style="--lc:' + lc + '"><i></i>' + esc(listName(card.idList)) + '</span>') + '</span>';
+      : '<span class="cv-status" style="--lc:' + lc + '"><i></i>' + esc(listName(card.idList)) + '</span>') + '</span></span>';
     var dateLbl = nets.length ? 'Publicación' : 'Vencimiento';
     var rel = '';
     if (card.due) {
@@ -251,7 +249,7 @@
       else if (new Date(card.due) < new Date()) rel = '<span class="cv-rel late">Vencida · ' + relDay(card.due) + '</span>';
       else rel = '<span class="cv-rel' + ((new Date(card.due) - new Date()) < 3 * 864e5 ? ' soon' : '') + '">' + relDay(card.due) + '</span>';
     }
-    h += '<span class="cv-k">📅 ' + dateLbl + '</span><span class="cv-v cv-datev">' +
+    h += '<span class="cv-pp"><span class="cv-k">' + dateLbl + '</span><span class="cv-v cv-datev">' +
       (w ? '<button class="cv-chipbtn" data-act="date-pop">' + (card.due ? esc(fmtLong(card.due, true)) : 'Añadir fecha') + ' ▾</button>'
          : '<span class="cv-chipbtn ro">' + (card.due ? esc(fmtLong(card.due, true)) : 'Sin fecha') + '</span>') + rel +
       (card.start ? '<span class="cv-muted">Inicio: ' + esc(fmtLong(card.start, false)) + '</span>' : (w ? '<button class="cv-ghost" data-act="date-pop">+ inicio</button>' : '')) +
@@ -261,9 +259,9 @@
         '<label class="cv-chk"><input type="checkbox" data-d="done"' + (card.dueComplete ? ' checked' : '') + '> Completada</label>' +
         '<div class="cv-pop-f"><button class="btn cv-sm" data-act="date-clear">Quitar fechas</button><span class="cv-sp"></span>' +
         '<button class="btn cv-sm" data-act="pop-close">Cancelar</button><button class="btn primary cv-sm" data-act="date-save">Guardar</button></div></div>' : '') +
-      '</span>';
+      '</span></span>';
     var mem = card.members || [];
-    h += '<span class="cv-k">👤 Responsable</span><span class="cv-v cv-rel-pos">' +
+    h += '<span class="cv-pp"><span class="cv-k">Responsable</span><span class="cv-v cv-rel-pos">' +
       mem.map(function (m) { return '<span class="cv-person">' + avatar(m, 24) + (mem.length <= 2 ? esc((m.fullName || m.username || '').split(' ')[0]) : '') + '</span>'; }).join('') +
       (w ? '<button class="cv-add" data-act="pick-members" title="Responsables">+</button>' : (mem.length ? '' : '<span class="cv-muted">—</span>'));
     if (w) {
@@ -273,8 +271,8 @@
           (memberIds.indexOf(m.id) !== -1 ? ' checked' : '') + '>' + avatar(m, 22) + esc(m.fullName || m.username) + '</label>';
       }).join('') + '</div>';
     }
-    h += '</span>';
-    h += '<span class="cv-k">🏷 Etiquetas</span><span class="cv-v cv-rel-pos">' + lab.map(labelChip).join('') +
+    h += '</span></span>';
+    h += '<span class="cv-pp"><span class="cv-k">Etiquetas</span><span class="cv-v cv-rel-pos">' + lab.map(labelChip).join('') +
       (w ? '<button class="cv-add sq" data-act="pick-labels" title="Etiquetas">+</button>' : (lab.length ? '' : '<span class="cv-muted">—</span>'));
     if (w) {
       var labelIds = lab.map(function (l) { return l.id; });
@@ -283,11 +281,11 @@
           (labelIds.indexOf(l.id) !== -1 ? ' checked' : '') + '>' + labelChip(l) + '</label>';
       }).join('') + '</div>';
     }
-    h += '</span>';
+    h += '</span></span>';
     if (nets.length) {
-      h += '<span class="cv-k">📱 Redes</span><span class="cv-v">' + nets.map(function (d) {
+      h += '<span class="cv-pp"><span class="cv-k">Redes</span><span class="cv-v">' + nets.map(function (d) {
         return '<span class="cv-net"><span class="cv-ni n-' + d.net + '"></span>' + esc(d.label) + '</span>';
-      }).join('') + '<span class="cv-muted">según etiquetas</span></span>';
+      }).join('') + '</span></span>';
     }
     var tot = 0, dn = 0;
     checklists.forEach(function (cl) { (cl.checkItems || []).forEach(function (it) { tot++; if (it.state === 'complete') dn++; }); });
@@ -295,8 +293,7 @@
     if (tot) {
       var pend = [];
       checklists.forEach(function (cl) { (cl.checkItems || []).forEach(function (it) { if (it.state !== 'complete') pend.push(it.name); }); });
-      h += '<span class="cv-k">☑ Checklist</span><span class="cv-v"><span class="cv-prog2"><i style="width:' + Math.round(dn * 100 / tot) + '%"></i></span><b>' + dn + '/' + tot + '</b>' +
-        (pend.length ? '<span class="cv-muted cv-ell">Pendiente: ' + esc(pend.slice(0, 3).join(', ')) + (pend.length > 3 ? '…' : '') + '</span>' : '<span class="cv-muted">Todo hecho</span>') + '</span>';
+      h += '<span class="cv-pp" title="' + esc(pend.length ? 'Pendiente: ' + pend.join(', ') : 'Todo hecho') + '"><span class="cv-k">Checklist</span><span class="cv-v"><span class="cv-prog2"><i style="width:' + Math.round(dn * 100 / tot) + '%"></i></span><b>' + dn + '/' + tot + '</b></span></span>';
     }
     h += '</div>';
 
@@ -319,7 +316,7 @@
       '<button role="tab" class="cv-tab' + (sp.tab === 'details' ? ' on' : '') + '" data-act="cv-tab" data-tab="details">Contenido</button>' +
       (nets.length ? '<button role="tab" class="cv-tab' + (sp.tab === 'preview' ? ' on' : '') + '" data-act="cv-tab" data-tab="preview">Vista previa en redes <span class="cv-tab-n">' + nets.length + '</span></button>' : '') +
       '<button role="tab" class="cv-tab' + (sp.tab === 'activity' ? ' on' : '') + '" data-act="cv-tab" data-tab="activity">Actividad' + (full ? ' <span class="cv-tab-n">' + nAct + '</span>' : '') + '</button>' +
-      '<span class="cv-kb">' + (sib && sib.ids.length > 1 ? '<kbd>J</kbd> <kbd>K</kbd> siguiente / anterior · ' : '') + '<kbd>Esc</kbd> cerrar</span></div>';
+      '<span class="cv-kb">' + (sib && sib.ids.length > 1 ? '<kbd>J</kbd><kbd>K</kbd> tarjeta · ' : '') + '<kbd>Esc</kbd> cerrar</span></div>';
 
     h += '<div class="cv-body' + (sp.tab === 'preview' ? ' is-preview' : '') + '"><div class="cv-main">';
     if (sp.tab === 'preview') h += previewMain(nets, attachments);
