@@ -34,9 +34,9 @@
     },
 
     // En cada tarjeta de Trello: acceso directo a esa tarjeta en el calendario.
-    // Insignia azul junto al título (lo más visible)…
+    // Insignia roja junto al título (lo más visible)…
     'card-detail-badges': function (t) {
-      return [{ title: 'Calendario', text: '📅 ' + OPEN_TXT, color: 'blue',
+      return [{ title: 'Calendario', text: '📅 ' + OPEN_TXT, color: 'red',
         callback: function (t2) { return openCalendar(t2, t2.getContext().card); } }];
     },
     // …una sección con botón grande en el cuerpo de la tarjeta…
