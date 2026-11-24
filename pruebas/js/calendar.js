@@ -277,7 +277,7 @@
     // Al llegar a un mes, se coloca en la semana actual (si está en ese mes); al refrescar, se queda donde estaba.
     if (keepTop != null) cal.scrollTop = keepTop;
     else {
-      var td = cal.querySelector('.day.today'), dw = cal.querySelector('.dow');
+      var sel = cal.querySelector('.ev.sel'), td = (sel && sel.closest('.day')) || cal.querySelector('.day.today'), dw = cal.querySelector('.dow');
       cal.scrollTop = 0;
       if (td) cal.scrollTop = Math.max(0, td.getBoundingClientRect().top - cal.getBoundingClientRect().top - (dw ? dw.offsetHeight : 0));
     }
@@ -1273,13 +1273,22 @@
       var p = r[4] || {};
       ['hiddenLists', 'labels', 'members'].forEach(function (k) { if (!Array.isArray(p[k])) p[k] = []; });
       state.prefs = Object.assign(state.prefs, p);
-      if (!state.loaded) {
+      var first = !state.loaded, want = null;
+      if (first) {
         state.view = state.prefs.view || state.cfg.defaultView;
         state.loaded = true;
+        // Abierto desde el botón «Abrir en el calendario» de una tarjeta: ir a su fecha y abrirla.
+        var wid = (location.search.match(/[?&]card=([\w-]+)/) || [])[1] || (t.arg && t.arg('card'));
+        if (wid) want = state.cards.filter(function (c) { return c.id === wid || c.shortLink === wid; })[0] || null;
+        var wev = want && eventOf(want);
+        if (wev) state.cursor = fromKey(wev.endKey);
+        if (want) state.selId = want.id;
+        if (wid && !want) setTimeout(function () { toast('No se encuentra esa tarjeta (puede estar archivada)', true); }, 300);
       }
       renderSourceSelect();
       renderFilters();
       render();
+      if (want) openCard(want.id);
       ensureUsernames();
     }).catch(function (err) {
       $('cal').innerHTML = '<div class="empty">No se pudieron cargar las tarjetas: ' + esc(err && err.message) + '</div>';
