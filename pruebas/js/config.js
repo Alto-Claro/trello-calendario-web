@@ -17,7 +17,7 @@ window.CAL_CONFIG = {
   // Google Drive (js/drive.js). Con GOOGLE_CLIENT_ID, los archivos grandes se suben a Drive en vez de a R2.
   // ID de cliente OAuth "Aplicación web" de Google Cloud con origen https://alto-claro.github.io (es público).
   // Los enlaces de Drive se previsualizan siempre, haya o no ID de cliente.
-  GOOGLE_CLIENT_ID: '',
+  GOOGLE_CLIENT_ID: '256467190711-8t6mnosg4cd0pinibagn9d3u8r21o3k4.apps.googleusercontent.com',
   DRIVE_PARENT_ID: '',     // carpeta (o unidad compartida) donde crear las carpetas por tablero; vacío = Mi unidad
-  DRIVE_SHARE: 'domain'    // 'domain' = cualquiera de vuestro Google Workspace con el enlace · 'anyone' · 'none'
+  DRIVE_SHARE: 'anyone'    // 'anyone' = cualquiera con el enlace (no aparece en búsquedas) · 'domain' = solo vuestro Workspace · 'none'
 };

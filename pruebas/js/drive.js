@@ -5,7 +5,7 @@
  *      No hace falta conectar nada: usa la sesión de Google del navegador. Si el navegador bloquea
  *      esa sesión dentro de Trello (Safari), con Drive conectado se piden las miniaturas a la API.
  * SUBIR: los archivos grandes se suben a una carpeta de Drive del usuario («Calendario Trello · <tablero>»)
- *      y se comparten como "lector con el enlace" dentro de su dominio de Google Workspace.
+ *      y se comparten como "cualquiera con el enlace puede ver" (DRIVE_SHARE en js/config.js).
  *      Necesita GOOGLE_CLIENT_ID en js/config.js (sin él, el botón no sube a Drive).
  *
  * Permiso que se pide a Google: drive.file (solo los archivos que crea este calendario). */
@@ -170,9 +170,9 @@
     }
     return domainP;
   }
-  // Compartir: 'domain' (por defecto) = cualquiera de tu Workspace con el enlace; 'anyone' = cualquiera con el enlace; 'none'.
+  // Compartir: 'anyone' (por defecto) = cualquiera con el enlace; 'domain' = cualquiera de tu Workspace con el enlace; 'none'.
   function share(id) {
-    var mode = C.DRIVE_SHARE || 'domain';
+    var mode = C.DRIVE_SHARE || 'anyone';
     if (mode === 'none') return Promise.resolve('none');
     var perm = mode === 'anyone' ? Promise.resolve({ type: 'anyone', role: 'reader', allowFileDiscovery: false })
       : myDomain().then(function (d) { return d ? { type: 'domain', domain: d, role: 'reader', allowFileDiscovery: false } : null; });
