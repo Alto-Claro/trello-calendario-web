@@ -269,10 +269,19 @@
       }
       html += '</div></div>';
     });
-    $('cal').innerHTML = html + '</div></div>';
-    $('cal').firstChild.style.display = 'flex';
-    $('cal').firstChild.style.flexDirection = 'column';
-    $('cal').firstChild.style.flex = '1';
+    var cal = $('cal'), mKey = c.getFullYear() + '-' + c.getMonth(), keepTop = state.monthShown === mKey ? cal.scrollTop : null;
+    cal.innerHTML = html + '</div></div>';
+    cal.firstChild.style.display = 'flex';
+    cal.firstChild.style.flexDirection = 'column';
+    cal.firstChild.style.flex = '1';
+    // Al llegar a un mes, se coloca en la semana actual (si está en ese mes); al refrescar, se queda donde estaba.
+    if (keepTop != null) cal.scrollTop = keepTop;
+    else {
+      var td = cal.querySelector('.day.today'), dw = cal.querySelector('.dow');
+      cal.scrollTop = 0;
+      if (td) cal.scrollTop = Math.max(0, td.getBoundingClientRect().top - cal.getBoundingClientRect().top - (dw ? dw.offsetHeight : 0));
+    }
+    state.monthShown = mKey;
   }
 
   // ───── Semana con horas ─────
@@ -745,7 +754,7 @@
 
   // ───────────────────────── Eventos de UI ─────────────────────────
   function bindUi() {
-    $('today').onclick = function () { state.cursor = startOfDay(new Date()); render(); };
+    $('today').onclick = function () { state.cursor = startOfDay(new Date()); state.monthShown = null; render(); };
     $('prev').onclick = function () { move(-1); };
     $('next').onclick = function () { move(1); };
     $('refresh').onclick = function () { load().then(function () { toast('Actualizado'); }); };
