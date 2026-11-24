@@ -4,31 +4,43 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calendario</title>
-  <link rel="stylesheet" href="./css/calendar.css?v=1795400000">
+  <link rel="stylesheet" href="./css/calendar.css?v=1795500003">
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 </head>
 <body>
   <header class="toolbar">
     <div class="nav">
-      <button id="today" class="btn">Hoy</button>
-      <button id="prev" class="btn icon" aria-label="Anterior">‹</button>
-      <button id="next" class="btn icon" aria-label="Siguiente">›</button>
+      <button id="today" class="btn" title="Ir a hoy (T)">Hoy</button>
+      <button id="prev" class="btn icon ghost" aria-label="Anterior" title="Anterior (←)">‹</button>
+      <button id="next" class="btn icon ghost" aria-label="Siguiente" title="Siguiente (→)">›</button>
       <h1 id="title"></h1>
     </div>
-    <div class="views" role="tablist">
-      <button class="btn seg" data-view="month">Mes</button>
-      <button class="btn seg" data-view="week">Semana</button>
-      <button class="btn seg" data-view="agenda">Agenda</button>
+    <div class="views seg" role="tablist">
+      <button class="seg-b" data-view="month" title="Mes (M)">Mes</button>
+      <button class="seg-b" data-view="week" title="Semana (S)">Semana</button>
+      <button class="seg-b" data-view="agenda" title="Agenda (A)">Agenda</button>
     </div>
     <div class="tools">
-      <input id="q" type="search" placeholder="Buscar tarjetas…" aria-label="Buscar">
-      <select id="source" aria-label="Fecha que se muestra"></select>
+      <label class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="Buscar tarjetas…" aria-label="Buscar"><kbd>/</kbd></label>
+      <label class="selectlike" title="Qué fecha de la tarjeta se usa en el calendario"><small>Fecha:</small><select id="source" aria-label="Fecha que se muestra"></select></label>
+      <label class="selectlike" id="hoursWrap" hidden title="Horas que se ven en la vista Semana"><small>Horario:</small><select id="hours" aria-label="Horario de la semana">
+        <option value="8-20">8 – 20 h</option><option value="7-22">7 – 22 h</option><option value="9-18">9 – 18 h</option><option value="0-24">Todo el día</option>
+      </select></label>
       <button id="filtersBtn" class="btn">Filtros <span id="fcount" class="pill" hidden></span></button>
-      <button id="unschedBtn" class="btn">Sin fecha <span id="ucount" class="pill"></span></button>
-      <button id="detailBtn" class="btn" title="Mostrar etiquetas y lista en cada tarjeta">Detalles</button>
-      <button id="refresh" class="btn icon" aria-label="Recargar" title="Recargar">⟳</button>
+      <button id="unschedBtn" class="btn">Sin fecha <span id="ucount" class="pill grey"></span></button>
+      <button id="detailBtn" class="switch" role="switch" title="Mostrar etiquetas, lista y miniatura en cada tarjeta"><i></i>Etiquetas</button>
+      <div class="menu-w">
+        <button id="moreBtn" class="btn icon ghost" aria-label="Más opciones" title="Más opciones">⋯</button>
+        <div id="moreMenu" class="menu" hidden>
+          <button data-more="refresh">⟳ Recargar tarjetas</button>
+          <button data-more="ics">⤓ Exportar a .ics (Google, Outlook, Apple)</button>
+          <button data-more="news">✨ Ver novedades</button>
+        </div>
+      </div>
+      <button id="refresh" hidden></button>
     </div>
   </header>
+  <div id="chips" class="chips"></div>
 
   <div id="authBar" class="authbar" hidden>
     <span>Modo solo lectura. Autoriza para cambiar fechas arrastrando tarjetas.</span>
@@ -41,6 +53,7 @@
       <h2>Sin fecha</h2>
       <p class="hint" id="unschedHint">Arrastra una tarjeta a un día para programarla.</p>
       <div id="unschedList"></div>
+      <div id="overdueWrap" hidden><h3 class="sep">Vencidas sin completar</h3><div id="overdueList"></div></div>
     </aside>
     <aside id="filters" class="side" hidden>
       <h2>Filtros</h2>
@@ -74,30 +87,18 @@
             <button type="button" id="tokSave" class="btn primary">Guardar</button></div>
         </details>
       </div>
-      <form id="nForm" hidden>
-        <h2 id="nTitle">Nueva tarjeta</h2>
-        <label class="fld">Nombre<input id="nName" type="text" autocomplete="off"></label>
-        <label class="fld">Lista<select id="nList"></select></label>
-        <div id="nTplRow"><label class="fld">Plantilla<select id="nTpl"></select></label>
-          <p id="nTplHint" class="hint"></p></div>
-        <label class="fld" id="nTimeRow">Hora<input id="nTime" type="time"></label>
-        <div class="dlg-actions">
-          <button type="button" class="btn" data-close>Cancelar</button>
-          <button type="submit" id="nCreate" class="btn primary">Crear tarjeta</button>
-        </div>
-      </form>
     </div>
   </div>
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="./js/config.js?v=1795400000"></script>
-  <script src="./js/shared.js?v=1795400000"></script>
-  <script src="./js/drive.js?v=1795400000"></script>
-  <script src="./js/mock.js?v=1795400000"></script>
-  <script src="./js/socialpreview.js?v=1795400000"></script>
-  <script src="./js/cardview.js?v=1795400000"></script>
-  <script src="./js/whatsnew.js?v=1795400000"></script>
-  <script src="./js/calendar.js?v=1795400000"></script>
+  <script src="./js/config.js?v=1795500003"></script>
+  <script src="./js/shared.js?v=1795500003"></script>
+  <script src="./js/drive.js?v=1795500003"></script>
+  <script src="./js/mock.js?v=1795500003"></script>
+  <script src="./js/socialpreview.js?v=1795500003"></script>
+  <script src="./js/cardview.js?v=1795500003"></script>
+  <script src="./js/whatsnew.js?v=1795500003"></script>
+  <script src="./js/calendar.js?v=1795500003"></script>
 </body>
 </html>

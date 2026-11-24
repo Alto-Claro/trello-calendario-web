@@ -119,6 +119,23 @@
     tk.attachments = [{ id: 'b5', name: 'receta.mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', mimeType: 'video/mp4', isUpload: true, bytes: 1100000 }];
     tk.desc = '📅 **Publicación:** 20/11/2026 13:00\n📌 **Estado:** Pendiente\n\n---\n\n## ✍️ Contenido / Copy\n\nReceta en 30 segundos 🌸 ¿La probáis? #receta #fyp\n\n---\n\n## ✍️ Copy · TikTok\n\nPOV: tienes 30 segundos y hambre 🌸 #receta #fyp #parati';
 
+    extra[tk.id] = {
+      checklists: [{ id: 'cl9', name: 'Producción', checkItems: [
+        { id: 'k1', name: 'Guion', state: 'complete', pos: 1, idMember: 'm3', due: iso(-4, 12) },
+        { id: 'k2', name: 'Grabación', state: 'complete', pos: 2, idMember: 'm1', due: iso(-1, 12) },
+        { id: 'k3', name: 'Edición y montaje', state: 'incomplete', pos: 3, idMember: 'm3', due: iso(1, 12) },
+        { id: 'k4', name: 'Subtítulos', state: 'incomplete', pos: 4 },
+        { id: 'k5', name: 'Aprobación del cliente', state: 'incomplete', pos: 5, idMember: 'm2', due: iso(2, 10) }] }],
+      attachments: tk.attachments,
+      actions: [
+        { id: 'y5', type: 'commentCard', date: iso(0, 8), data: { text: 'Perfecta. Se lo paso al cliente para aprobar.' }, memberCreator: members[1] },
+        { id: 'y4', type: 'addAttachmentToCard', date: iso(0, 7), data: { attachment: { name: 'receta.mp4' } }, memberCreator: members[2] },
+        { id: 'y3', type: 'commentCard', date: iso(-1, 19), data: { text: 'Hecho, subo la versión nueva por la mañana 👍' }, memberCreator: members[2] },
+        { id: 'y2', type: 'updateCard', date: iso(-1, 18), data: { listBefore: { name: 'Pendiente' }, listAfter: { name: 'En curso' } }, memberCreator: members[2] },
+        { id: 'y1', type: 'commentCard', date: iso(-1, 17), data: { text: '@lucia ¿podemos dejarlo en 30 s? El cliente lo quiere más corto.' }, memberCreator: members[0] }
+      ]
+    };
+    tk.badges = { checkItems: 5, checkItemsChecked: 2, comments: 3 };
     cards[cards.length - 2].isTemplate = true;
     var store = {};
     var renderFn = null;

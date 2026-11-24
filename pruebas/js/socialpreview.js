@@ -95,13 +95,14 @@
   }
   // Devuelve la descripción con el copy de esa red cambiado (text vacío o null = quitar el copy propio).
   function setCopy(md, net, text) {
+    net = net || null;
     var sec = sections(md), own = sec.list.filter(function (x) { return x.net === net; })[0];
     text = (text || '').trim();
     if (!text) return own ? removeSections(sec, [own]).trim() : String(md || '');
     if (own) {
       return sec.lines.slice(0, own.start).concat(['', text, ''], sec.lines.slice(own.end)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
-    var block = ['---', '', '## ✍️ Copy · ' + NETS[net].name, '', text];
+    var block = ['---', '', net ? '## ✍️ Copy · ' + NETS[net].name : '## ✍️ Contenido / Copy', '', text];
     if (sec.list.length) { // justo después de las otras secciones de copy
       var last = sec.list[sec.list.length - 1];
       return sec.lines.slice(0, last.end).concat([''], block, [''], sec.lines.slice(last.end)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -303,6 +304,52 @@
     return list.filter(function (d) { return d.key === key; })[0] || list[0] || null;
   }
 
+  // ───── API para la tarjeta nueva: un móvil suelto y la revisión en lista ─────
+  // o como en render(); o.text (opcional) sustituye al copy guardado (vista previa en vivo mientras se escribe).
+  function phone(o, key) {
+    var list = detect(o.card), cur = list.filter(function (d) { return d.key === key; })[0] || list[0];
+    if (!cur) return '';
+    var media = mediaList(o.card, o.attachments || [], o.kindOf);
+    var text = plain(o.text != null ? o.text : copyFor(o.card.desc, cur.net).text);
+    var oo = Object.create(o); oo.fmt = cur.fmt;
+    return RENDER[cur.net](oo, media, text);
+  }
+  // [{ lvl: 'ok'|'warn'|'bad', text }]
+  function review(o, key) {
+    var list = detect(o.card), cur = list.filter(function (d) { return d.key === key; })[0] || list[0];
+    if (!cur) return [];
+    var net = cur.net, fmt = cur.fmt, out = [];
+    var media = mediaList(o.card, o.attachments || [], o.kindOf);
+    var cp = copyFor(o.card.desc, net), text = plain(o.text != null ? o.text : cp.text);
+    var vids = media.filter(function (a) { return o.kindOf(a) === 'video'; }).length;
+    var imgs = media.length - vids;
+    if (fmt === 'story') out.push({ lvl: 'warn', text: 'Las stories no llevan el texto: tiene que ir en la imagen o el vídeo' });
+    else {
+      var lim = NETS[net].limit, n = text.length;
+      if (!n) out.push({ lvl: 'bad', text: 'Falta el copy' });
+      else out.push({ lvl: n > lim ? 'bad' : 'ok', text: n > lim ? 'El copy pasa del límite (' + fmtN(n) + ' / ' + fmtN(lim) + ')' : 'Copy dentro del límite (' + fmtN(n) + ' / ' + fmtN(lim) + ')' });
+      var tags = (text.match(/(^|\s)#[\wáéíóúñü]+/gi) || []).length;
+      if (net === 'instagram' && tags > 30) out.push({ lvl: 'bad', text: tags + ' hashtags: Instagram admite 30 como máximo' });
+      else if (tags) out.push({ lvl: 'ok', text: tags + ' hashtag' + (tags > 1 ? 's' : '') });
+      if (n > NETS[net].fold && net !== 'x') out.push({ lvl: 'warn', text: 'En el feed se corta a los ' + NETS[net].fold + ' caracteres: lo importante, al principio' });
+    }
+    if ((net === 'tiktok' || net === 'youtube' || fmt === 'reel')) {
+      out.push(vids ? { lvl: 'ok', text: 'Vídeo adjunto' + (vids > 1 ? ' (' + vids + ')' : '') }
+        : { lvl: 'bad', text: (net === 'tiktok' ? 'TikTok' : net === 'youtube' ? 'YouTube' : 'Un reel') + ' necesita un vídeo' });
+    } else if (fmt === 'carousel') {
+      out.push(media.length >= 2 ? { lvl: 'ok', text: media.length + ' imágenes en el carrusel' } : { lvl: 'bad', text: 'Un carrusel necesita al menos 2 imágenes' });
+      if (media.length > 20) out.push({ lvl: 'bad', text: 'Máximo 20 elementos por carrusel' });
+    } else if (net === 'instagram' || fmt === 'story') {
+      out.push(media.length ? { lvl: 'ok', text: imgs ? 'Imagen adjunta' : 'Vídeo adjunto' } : { lvl: 'bad', text: 'Falta imagen o vídeo' });
+    }
+    if (net === 'x' && media.length > 4) out.push({ lvl: 'warn', text: 'X muestra como máximo 4 imágenes' });
+    var c = o.card;
+    if (!c.due) out.push({ lvl: 'warn', text: 'Sin fecha de publicación' });
+    else if (!c.dueComplete && new Date(c.due) < new Date()) out.push({ lvl: 'bad', text: 'La fecha de publicación ya ha pasado' });
+    else out.push({ lvl: 'ok', text: 'Fecha de publicación: ' + o.when });
+    return out;
+  }
+
   function render(o) {
     var list = detect(o.card);
     if (!list.length) return '';
@@ -325,5 +372,6 @@
     return h + '</div>';
   }
 
-  window.CalSocial = { NETS: NETS, detect: detect, render: render, current: current, copyFor: copyFor, setCopy: setCopy };
+  window.CalSocial = { NETS: NETS, detect: detect, render: render, current: current, copyFor: copyFor, setCopy: setCopy,
+    sections: sections, removeSections: removeSections, plain: plain, rich: rich, phone: phone, review: review };
 })();
