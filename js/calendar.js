@@ -10,11 +10,12 @@
   // ───────────────────────── Estado ─────────────────────────
   var state = {
     cfg: S.mergeCfg(null),
-    prefs: { view: null, source: null, hiddenLists: [], labels: [], members: [], completed: null, weekends: null },
+    prefs: { view: null, source: null, hiddenLists: [], labels: [], members: [], completed: null, weekends: null, colorBy: null, hours: null },
     cards: [], lists: [], board: { labels: [], members: [], customFields: [] },
     listById: {}, cfById: {},
     view: 'month', cursor: startOfDay(new Date()), q: '',
-    canWrite: false, canEdit: false, templates: [], templateIds: {}, loaded: false
+    canWrite: false, canEdit: false, templates: [], templateIds: {}, loaded: false,
+    selId: null, lastIdx: {}
   };
 
   // ───────────────────────── Fechas ─────────────────────────
@@ -33,9 +34,11 @@
   function isWeekend(d) { return d.getDay() === 0 || d.getDay() === 6; }
 
   // Mueve la fecha `iso` al día `dayKey` conservando la hora (o la hora por defecto).
-  function moveToDay(iso, dayKey) {
+  function moveToDay(iso, dayKey, mins) {
     var target = fromKey(dayKey);
-    if (iso) {
+    if (mins != null) {
+      target.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+    } else if (iso) {
       var old = new Date(iso);
       target.setHours(old.getHours(), old.getMinutes(), 0, 0);
     } else {
@@ -82,6 +85,21 @@
   function source() { return state.prefs.source || state.cfg.dateSource; }
   function showCompleted() { return state.prefs.completed != null ? state.prefs.completed : state.cfg.showCompleted; }
   function showWeekends() { return state.prefs.weekends != null ? state.prefs.weekends : state.cfg.showWeekends; }
+  function colorBy() { return state.prefs.colorBy || state.cfg.colorBy; }
+  // ¿La fecha elegida lleva hora? (la de inicio de Trello es solo de día)
+  function srcHasTime() { return source() !== 'start'; }
+  function isLate(card) { return !card.dueComplete && card.due && new Date(card.due) < new Date(); }
+  // Columnas: los fines de semana más estrechos.
+  function colsTpl(days) {
+    return days.map(function (d) { return isWeekend(d) ? 'minmax(0, .62fr)' : 'minmax(0, 1fr)'; }).join(' ');
+  }
+  function relDay(d) {
+    var n = diffDays(key(new Date()), key(d));
+    if (n === 0) return 'hoy';
+    if (n === 1) return 'mañana';
+    if (n === -1) return 'ayer';
+    return n > 0 ? 'en ' + n + ' días' : 'hace ' + (-n) + ' días';
+  }
 
   // ───────────────────────── Modelo de eventos ─────────────────────────
   // Devuelve {startKey, endKey, time(Date|null)} según la fuente de fecha, o null si no tiene fecha.
@@ -147,7 +165,7 @@
   }
 
   function colorsFor(card) {
-    var by = state.cfg.colorBy, bg = null;
+    var by = colorBy(), bg = null;
     if (by === 'label' && card.labels && card.labels.length) bg = S.labelColor(card.labels[0].color);
     else if (by === 'list') bg = S.hashColor(card.idList);
     else if (by === 'member' && card.members && card.members.length) bg = S.hashColor(card.members[0].id);
@@ -161,7 +179,8 @@
   function evHtml(card, ev, dayKey, mode) {
     var cls = ['ev'];
     if (card.dueComplete) cls.push('done');
-    else if (card.due && new Date(card.due) < new Date()) cls.push('overdue');
+    else if (isLate(card)) cls.push('overdue');
+    if (state.selId === card.id) cls.push('sel');
     if (ev && dayKey) {
       if (dayKey !== ev.startKey) cls.push('cont-l');
       if (dayKey !== ev.endKey) cls.push('cont-r');
@@ -169,7 +188,8 @@
     var col = colorsFor(card);
     var style = col ? ' style="--ev-bg:' + col.bg + ';--ev-fg:' + col.fg + '"' : '';
     var showTime = ev && ev.time && (!dayKey || dayKey === ev.endKey);
-    var time = showTime ? '<span class="time">' + fmtTime(ev.time) + '</span>' : '';
+    var time = showTime ? '<span class="time">' + (card.dueComplete ? '<b class="ok">✓</b> ' : '') + fmtTime(ev.time) + '</span>'
+      : (card.dueComplete ? '<span class="time"><b class="ok">✓</b></span>' : '');
     var m = (card.members || [])[0], av = '';
     if (m && mode !== 'side') {
       av = m.avatar
@@ -201,12 +221,15 @@
         '<div class="ev-foot">' + (listObj ? '<span class="ev-list" style="--lc:' + S.hashColor(listObj.id) + '">' + esc(listObj.name) + '</span>' : '') + av + '</div>' +
         '</div>';
     }
+    var dots = (card.labels || []).slice(0, 3).map(function (l) {
+      return '<i class="dot" style="background:' + S.labelColor(l.color) + '" title="' + esc(l.name || '') + '"></i>';
+    }).join('');
     return '<div class="' + cls.join(' ') + '"' + style + attrs + '>' +
-      time + '<span class="name">' + esc(card.name) + '</span>' + meta + av + '</div>';
+      time + '<span class="name">' + esc(card.name) + '</span>' + meta + (dots ? '<span class="dots">' + dots + '</span>' : '') + av + '</div>';
   }
 
   // ───────────────────────── Vistas ─────────────────────────
-  var MAX_PER_CELL = 5;
+  var MAX_PER_CELL = 4;
   function addBtn(k) {
     return state.canEdit ? '<button class="add" data-add="' + k + '" title="Añadir tarjeta" aria-label="Añadir tarjeta">+</button>' : '';
   }
@@ -222,7 +245,7 @@
   }
 
   function renderDow(days) {
-    return '<div class="dow">' + days.map(function (d) {
+    return '<div class="dow" style="--tpl:' + colsTpl(days) + '">' + days.map(function (d) {
       return '<div>' + esc(fmt(d, { weekday: 'short' })) + '</div>';
     }).join('') + '</div>';
   }
@@ -234,36 +257,182 @@
     var weeks = Math.ceil((diffDays(key(gridStart), key(last)) + 1) / 7);
     var days = daysRow(gridStart, weeks * 7), today = key(new Date());
     var cols = showWeekends() ? 7 : 5;
-    var html = '<div style="--cols:' + cols + '" class="month">' + renderDow(days.slice(0, cols)) + '<div class="grid">';
+    var html = '<div style="--cols:' + cols + '" class="month">' + renderDow(days.slice(0, cols)) + '<div class="grid" style="--tpl:' + colsTpl(days.slice(0, cols)) + '">';
     days.forEach(function (d) {
       var k = key(d), items = idx[k] || [];
       var cls = 'day' + (d.getMonth() !== c.getMonth() ? ' other' : '') + (k === today ? ' today' : '');
-      html += '<div class="' + cls + '" data-date="' + k + '"><div class="dhead"><span class="dnum">' + d.getDate() + '</span>' + addBtn(k) + '</div><div class="events">';
+      html += '<div class="' + cls + (isWeekend(d) ? ' we' : '') + '" data-date="' + k + '"><div class="dhead"><span class="dnum">' + d.getDate() + '</span>' +
+        (items.length > MAX_PER_CELL ? '<span class="dcount">' + items.length + ' tarjetas</span>' : '') + addBtn(k) + '</div><div class="events">';
       items.slice(0, MAX_PER_CELL).forEach(function (it) { html += evHtml(it.card, it.ev, k, 'month'); });
       if (items.length > MAX_PER_CELL) {
-        html += '<button class="more" data-goto="' + k + '">+' + (items.length - MAX_PER_CELL) + ' más</button>';
+        html += '<button class="more" data-goto="' + k + '">+ ' + (items.length - MAX_PER_CELL) + ' más</button>';
       }
       html += '</div></div>';
     });
-    $('cal').innerHTML = html + '</div></div>';
-    $('cal').firstChild.style.display = 'flex';
-    $('cal').firstChild.style.flexDirection = 'column';
-    $('cal').firstChild.style.flex = '1';
+    var cal = $('cal'), mKey = c.getFullYear() + '-' + c.getMonth(), keepTop = state.monthShown === mKey ? cal.scrollTop : null;
+    cal.innerHTML = html + '</div></div>';
+    cal.firstChild.style.display = 'flex';
+    cal.firstChild.style.flexDirection = 'column';
+    cal.firstChild.style.flex = '1';
+    // Al llegar a un mes, se coloca en la semana actual (si está en ese mes); al refrescar, se queda donde estaba.
+    if (keepTop != null) cal.scrollTop = keepTop;
+    else {
+      var sel = cal.querySelector('.ev.sel'), td = (sel && sel.closest('.day')) || cal.querySelector('.day.today'), dw = cal.querySelector('.dow');
+      cal.scrollTop = 0;
+      if (td) cal.scrollTop = Math.max(0, td.getBoundingClientRect().top - cal.getBoundingClientRect().top - (dw ? dw.offsetHeight : 0));
+    }
+    state.monthShown = mKey;
+  }
+
+  // ───── Semana con horas ─────
+  var HR = 48; // píxeles por hora
+  function hoursRange(days, idx) {
+    var p = String(state.prefs.hours || '8-20').split('-'), h0 = +p[0] || 0, h1 = +p[1] || 24;
+    days.forEach(function (d) {
+      (idx[key(d)] || []).forEach(function (it) {
+        if (!timed(it)) return;
+        var h = it.ev.time.getHours();
+        if (h < h0) h0 = h;
+        if (h + 1 > h1) h1 = Math.min(24, h + 1);
+      });
+    });
+    // Si hoy está en la semana, que se vea la hora actual.
+    var now = new Date();
+    if (days.some(function (d) { return key(d) === key(now); })) {
+      h0 = Math.min(h0, now.getHours()); h1 = Math.max(h1, Math.min(24, now.getHours() + 1));
+    }
+    return [h0, Math.max(h0 + 1, h1)];
+  }
+  function timed(it) { return !!(it.ev.time && it.ev.startKey === it.ev.endKey); }
+  function minsOf(d) { return d.getHours() * 60 + d.getMinutes(); }
+  var minsOfDate = minsOf;
+  function hhmm(m) { return pad(Math.floor(m / 60) % 24) + ':' + pad(m % 60); }
+
+  // Coloca las tarjetas que coinciden en hora lado a lado.
+  function layoutDay(items) {
+    var evs = items.map(function (it) { var s = minsOf(it.ev.time); return { it: it, s: s, e: s + 60 }; })
+      .sort(function (a, b) { return a.s - b.s || a.e - b.e; });
+    var cluster = [], lanes = [], end = -1;
+    function flush() { cluster.forEach(function (x) { x.n = lanes.length; }); cluster = []; lanes = []; }
+    evs.forEach(function (x) {
+      if (x.s >= end && cluster.length) flush();
+      var lane = 0; while (lane < lanes.length && lanes[lane] > x.s) lane++;
+      lanes[lane] = x.e; x.lane = lane; cluster.push(x); end = Math.max(end, x.e);
+    });
+    flush();
+    return evs;
+  }
+
+  function blkHtml(x, k, h0) {
+    var card = x.it.card, ev = x.it.ev;
+    var cls = ['ev', 'blk'];
+    if (card.dueComplete) cls.push('done'); else if (isLate(card)) cls.push('overdue');
+    if (state.selId === card.id) cls.push('sel');
+    var col = colorsFor(card);
+    var top = (x.s - h0 * 60) / 60 * HR + 1, ht = Math.max(22, (x.e - x.s) / 60 * HR - 3);
+    var w = 100 / x.n, left = x.lane * w;
+    var style = 'top:' + top + 'px;height:' + ht + 'px;left:calc(' + left + '% + 2px);width:calc(' + w + '% - 4px)' +
+      (col ? ';--ev-bg:' + col.bg : '');
+    var labels = detailOn() ? (card.labels || []).slice(0, 3).map(function (l) {
+      var bg = S.labelColor(l.color);
+      return '<span class="lb" style="background:' + bg + ';color:' + S.textOn(bg) + '">' + esc(l.name || '') + '</span>';
+    }).join('') : '';
+    var m = (card.members || [])[0], av = m ? (m.avatar
+      ? '<span class="av" style="background-image:url(' + esc(m.avatar) + '/30.png)" title="' + esc(m.fullName) + '"></span>'
+      : '<span class="av" title="' + esc(m.fullName) + '">' + esc(m.initials || '') + '</span>') : '';
+    var listObj = state.listById[card.idList];
+    return '<div class="' + cls.join(' ') + '" style="' + style + '" tabindex="0" role="button" data-id="' + esc(card.id) + '" data-from="' + k + '"' +
+      (state.canEdit ? ' draggable="true"' : '') + ' title="' + esc(card.name + (listObj ? ' — ' + listObj.name : '')) + '">' +
+      '<div class="bt">' + (card.dueComplete ? '<b class="ok">✓</b> ' : '') + fmtTime(ev.time) + (x.n === 1 ? ' – ' + hhmm(x.e) : '') + '</div>' +
+      '<div class="name">' + esc(card.name) + '</div>' +
+      (ht > 58 && (labels || av) ? '<div class="bm">' + labels + av + '</div>' : '') + '</div>';
   }
 
   function renderWeek(idx) {
-    var days = daysRow(weekStartOf(state.cursor), 7), today = key(new Date());
-    var html = '<div class="week" style="--cols:' + days.length + ';display:flex;flex-direction:column;flex:1">' +
-      '<div class="dow">' + days.map(function (d) {
-        return '<div>' + esc(fmt(d, { weekday: 'short' })) + ' ' + d.getDate() + '</div>';
-      }).join('') + '</div><div class="grid">';
+    var cal = $('cal'), oldScroll = cal.querySelector('.wk-scroll');
+    var keepTop = oldScroll ? oldScroll.scrollTop : null;
+    var days = daysRow(weekStartOf(state.cursor), 7), today = key(new Date()), now = new Date();
+    var hr = hoursRange(days, idx), h0 = hr[0], h1 = hr[1];
+    var tpl = '56px ' + colsTpl(days), wkKey = key(days[0]);
+    var dayIdx = {}; days.forEach(function (d, i) { dayIdx[key(d)] = i; });
+
+    // Cabecera con la carga de cada día
+    var html = '<div class="wk" style="--tpl:' + tpl + ';--hr:' + HR + 'px">';
+    html += '<div class="wk-head"><div></div>' + days.map(function (d) {
+      var k = key(d), n = (idx[k] || []).length, bars = '';
+      for (var i = 0; i < 6; i++) bars += '<i class="' + (i < n ? (n >= 5 ? 'h' : 'f') : '') + '"></i>';
+      return '<div class="wk-dh' + (k === today ? ' today' : '') + '" data-date="' + k + '">' +
+        '<div class="wk-dt"><small>' + esc(fmt(d, { weekday: 'short' })) + '</small><b>' + d.getDate() + '</b>' + addBtn(k) + '</div>' +
+        '<div class="load">' + bars + '</div><span class="wk-n">' + (n ? n + (n === 1 ? ' tarjeta' : ' tarjetas') + (n >= 5 ? ' · día cargado' : '') : 'Libre') + '</span></div>';
+    }).join('') + '</div>';
+
+    // Fila «Todo el día»: rangos (barras) y tarjetas sin hora
+    var bars = [], seen = {}, untimed = {};
     days.forEach(function (d) {
-      var k = key(d), items = idx[k] || [];
-      html += '<div class="day' + (k === today ? ' today' : '') + '" data-date="' + k + '"><div class="dhead">' + addBtn(k) + '</div><div class="events">';
-      items.forEach(function (it) { html += evHtml(it.card, it.ev, k, 'week'); });
-      html += '</div></div>';
+      var k = key(d);
+      (idx[k] || []).forEach(function (it) {
+        if (timed(it)) return;
+        if (it.ev.startKey !== it.ev.endKey) {
+          if (seen[it.card.id]) return;
+          seen[it.card.id] = true;
+          var s = Math.max(0, dayIdx[it.ev.startKey] != null ? dayIdx[it.ev.startKey] : 0);
+          var e = dayIdx[it.ev.endKey] != null ? dayIdx[it.ev.endKey] : days.length - 1;
+          bars.push({ it: it, s: s, e: e, k: k });
+        } else (untimed[k] = untimed[k] || []).push(it);
+      });
     });
-    $('cal').innerHTML = html + '</div></div>';
+    var lanes = [];
+    bars.sort(function (a, b) { return a.s - b.s || b.e - a.e; }).forEach(function (b) {
+      var l = 0; while (lanes[l] != null && lanes[l] >= b.s) l++;
+      lanes[l] = b.e; b.lane = l;
+    });
+    var nl = lanes.length;
+    html += '<div class="wk-all" style="grid-template-rows:repeat(' + (nl + 1) + ', auto)"><div class="wk-lab" style="grid-row:1/-1">todo<br>el día</div>';
+    days.forEach(function (d, i) {
+      var k = key(d);
+      html += '<div class="wk-acol' + (isWeekend(d) ? ' we' : '') + (k === today ? ' today' : '') + '" style="grid-column:' + (i + 2) + ';grid-row:1/-1" data-date="' + k + '" data-allday="1"></div>';
+      html += '<div class="wk-ac" style="grid-column:' + (i + 2) + ';grid-row:' + (nl + 1) + '">' +
+        (untimed[k] || []).map(function (it) { return evHtml(it.card, it.ev, null, 'week'); }).join('') + '</div>';
+    });
+    bars.forEach(function (b) {
+      var card = b.it.card, col = colorsFor(card);
+      html += '<div class="ev bar' + (card.dueComplete ? ' done' : '') + (state.selId === card.id ? ' sel' : '') + '" style="grid-column:' + (b.s + 2) + '/' + (b.e + 3) +
+        ';grid-row:' + (b.lane + 1) + (col ? ';--ev-bg:' + col.bg + ';--ev-fg:' + col.fg : '') + '" tabindex="0" role="button" data-id="' + esc(card.id) +
+        '" data-from="' + key(days[b.s]) + '"' + (state.canEdit ? ' draggable="true"' : '') + '>' + esc(card.name) +
+        ' <small>(' + esc(fmt(fromKey(b.it.ev.startKey), { day: 'numeric', month: 'short' })) + ' → ' + esc(fmt(fromKey(b.it.ev.endKey), { day: 'numeric', month: 'short' })) + ')</small></div>';
+    });
+    html += '</div>';
+
+    // Cuerpo con horas
+    var H = (h1 - h0) * HR;
+    html += '<div class="wk-scroll"><div class="wk-body" style="height:' + H + 'px"><div class="wk-gut">';
+    for (var h = h0; h < h1; h++) html += '<div style="top:' + ((h - h0) * HR) + 'px">' + (h === h0 ? '' : pad(h) + ':00') + '</div>';
+    html += '</div>';
+    days.forEach(function (d) {
+      var k = key(d), items = (idx[k] || []).filter(timed);
+      html += '<div class="wk-col' + (isWeekend(d) ? ' we' : '') + (k === today ? ' today' : '') + '" data-date="' + k + '" data-slot="1" data-h0="' + h0 + '" data-h1="' + h1 + '">';
+      layoutDay(items).forEach(function (x) { html += blkHtml(x, k, h0); });
+      if (k === today) {
+        var nm = minsOf(now);
+        if (nm >= h0 * 60 && nm <= h1 * 60) html += '<div class="now" style="top:' + ((nm - h0 * 60) / 60 * HR) + 'px"><span>' + hhmm(nm) + '</span></div>';
+      }
+      html += '</div>';
+    });
+    html += '</div></div></div>';
+    cal.innerHTML = html;
+
+    // Desplazamiento: se conserva al refrescar; al cambiar de semana va a la hora actual o a la primera tarjeta.
+    var sc = cal.querySelector('.wk-scroll');
+    if (keepTop != null && state.weekShown === wkKey) sc.scrollTop = keepTop;
+    else {
+      var target = null;
+      if (dayIdx[today] != null) target = minsOf(now) - 90;
+      else {
+        days.forEach(function (d) { (idx[key(d)] || []).filter(timed).forEach(function (it) { var m = minsOf(it.ev.time); if (target == null || m < target) target = m - 30; }); });
+      }
+      sc.scrollTop = target == null ? 0 : Math.max(0, (target - h0 * 60) / 60 * HR);
+    }
+    state.weekShown = wkKey;
   }
 
   function renderAgenda(idx) {
@@ -288,7 +457,8 @@
     else {
       var a = state.view === 'week' ? weekStartOf(c) : c;
       var b = addDays(a, state.view === 'week' ? 6 : state.cfg.agendaDays - 1);
-      txt = fmt(a, { day: 'numeric', month: 'short' }) + ' – ' + fmt(b, { day: 'numeric', month: 'short', year: 'numeric' });
+      txt = (a.getMonth() === b.getMonth() ? a.getDate() : fmt(a, { day: 'numeric', month: 'short' })) + ' – ' +
+        fmt(b, { day: 'numeric', month: 'short', year: 'numeric' }).replace(/ de /g, ' ');
     }
     $('title').textContent = txt.charAt(0).toUpperCase() + txt.slice(1);
     document.querySelectorAll('[data-view]').forEach(function (b) {
@@ -296,10 +466,65 @@
     });
   }
 
+  // Vencidas sin completar (con los filtros actuales), las más recientes primero.
+  function renderOverdue() {
+    var list = state.cards.filter(function (c) {
+      return !state.templateIds[c.id] && isLate(c) && passesFilters(c);
+    }).sort(function (a, b) { return new Date(b.due) - new Date(a.due); }).slice(0, 20);
+    $('overdueWrap').hidden = !list.length;
+    $('overdueList').innerHTML = list.map(function (c) {
+      var d = new Date(c.due);
+      return evHtml(c, null, null, 'side').replace(/<\/div>$/, '') +
+        '<span class="late-when">' + esc(fmt(d, { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' + esc(fmtTime(d)) + ' · ' + esc(relDay(d)) + '</span></div>';
+    }).join('');
+  }
+
+  // Chips con los filtros activos + leyenda de colores
+  function renderChips(visible) {
+    var p = state.prefs, chips = [];
+    function chip(kind, val, label, strong) {
+      chips.push('<span class="chip">' + esc(label) + (strong ? ' <b>' + esc(strong) + '</b>' : '') +
+        '<button class="x" data-unf="' + kind + '" data-v="' + esc(val || '') + '" aria-label="Quitar filtro">×</button></span>');
+    }
+    if (state.q) chip('q', '', 'Búsqueda', '«' + state.q + '»');
+    p.hiddenLists.forEach(function (id) { var l = state.listById[id]; if (l) chip('list', id, 'Sin la lista', l.name); });
+    p.labels.forEach(function (id) {
+      var l = (state.board.labels || []).filter(function (x) { return x.id === id; })[0];
+      chip('label', id, 'Etiqueta', id === '__none' ? 'Sin etiqueta' : (l && (l.name || l.color)) || '?');
+    });
+    p.members.forEach(function (id) {
+      var m = (state.board.members || []).filter(function (x) { return x.id === id; })[0];
+      chip('member', id, 'Miembro', id === '__none' ? 'Sin asignar' : (m && (m.fullName || m.username)) || '?');
+    });
+    if (!showCompleted()) chip('completed', '', 'Sin completadas');
+    if (!showWeekends()) chip('weekends', '', 'Sin fines de semana');
+    var left = chips.length
+      ? '<span class="muted">Filtrando:</span>' + chips.join('') + '<button class="link" data-unf="all">Quitar filtros</button>'
+      : '<span class="muted">Sin filtros · ' + visible + ' tarjetas con fecha</span>';
+
+    var by = colorBy(), items = [];
+    if (by === 'label') {
+      var used = {};
+      state.cards.forEach(function (c) { if (passesFilters(c)) (c.labels || []).slice(0, 1).forEach(function (l) { used[l.id] = (used[l.id] || 0) + 1; }); });
+      items = (state.board.labels || []).filter(function (l) { return used[l.id]; })
+        .sort(function (a, b) { return used[b.id] - used[a.id]; })
+        .map(function (l) { return [S.labelColor(l.color), l.name || l.color]; });
+    } else if (by === 'list') items = state.lists.map(function (l) { return [S.hashColor(l.id), l.name]; });
+    else if (by === 'member') items = (state.board.members || []).map(function (m) { return [S.hashColor(m.id), m.fullName || m.username]; });
+    else if (by === 'status') items = [['#579dff', 'Pendiente'], ['#f87462', 'Vencida'], ['#4bce97', 'Completada']];
+    var more = items.length > 7 ? '<span class="muted">+' + (items.length - 7) + '</span>' : '';
+    var opts = [['label', 'Etiqueta'], ['list', 'Lista'], ['member', 'Miembro'], ['status', 'Estado'], ['none', 'Ninguno']];
+    $('chips').innerHTML = '<div class="chips-l">' + left + '</div><div class="legend">' +
+      items.slice(0, 7).map(function (x) { return '<span><i class="dot" style="background:' + x[0] + '"></i>' + esc(x[1]) + '</span>'; }).join('') + more +
+      '<label class="muted">Color por <select id="colorBy">' + opts.map(function (o) {
+        return '<option value="' + o[0] + '"' + (o[0] === by ? ' selected' : '') + '>' + o[1] + '</option>';
+      }).join('') + '</select></label></div>';
+  }
+
   function renderUnscheduled(list) {
     $('ucount').textContent = list.length;
     $('unschedHint').textContent = state.canWrite
-      ? 'Arrastra una tarjeta a un día para programarla. Suelta aquí una tarjeta del calendario para quitarle la fecha.'
+      ? 'Arrástralas a un día (o a una hora en la vista Semana) para programarlas. Suelta aquí una tarjeta del calendario para quitarle la fecha.'
       : 'Tarjetas sin fecha con los filtros actuales.';
     $('unschedList').innerHTML = list.length
       ? list.map(function (c) { return evHtml(c, null, null, 'side'); }).join('')
@@ -314,9 +539,18 @@
     else if (state.view === 'week') renderWeek(r.idx);
     else renderAgenda(r.idx);
     renderUnscheduled(r.unscheduled);
-    $('detailBtn').classList.toggle('active', detailOn());
+    renderOverdue();
+    var withDate = 0;
+    state.cards.forEach(function (c) { if (!state.templateIds[c.id] && passesFilters(c) && eventOf(c)) withDate++; });
+    renderChips(withDate);
+    state.lastIdx = r.idx;
+    $('hoursWrap').hidden = state.view !== 'week';
+    $('hours').value = state.prefs.hours || '8-20';
+    $('detailBtn').classList.toggle('on', detailOn());
+    $('detailBtn').setAttribute('aria-checked', String(detailOn()));
     document.body.classList.toggle('detail', detailOn());
-    var n = state.prefs.hiddenLists.length + state.prefs.labels.length + state.prefs.members.length;
+    var n = state.prefs.hiddenLists.length + state.prefs.labels.length + state.prefs.members.length +
+      (showCompleted() ? 0 : 1) + (showWeekends() ? 0 : 1);
     $('fcount').hidden = !n; $('fcount').textContent = n;
   }
 
@@ -427,25 +661,31 @@
   }
 
   // Aplica el cambio de fecha (dayKey = null → quitar fecha).
-  function reschedule(card, dayKey, fromDay) {
+  // mins (opcional): minutos desde las 00:00 → también cambia la hora (vista Semana).
+  function reschedule(card, dayKey, fromDay, mins) {
     var src = source(), body = {}, cfId = null, local = {};
     var ev = eventOf(card);
-    if (src === 'due') { local.due = body.due = dayKey ? moveToDay(card.due, dayKey) : null; }
+    if (!srcHasTime()) mins = null;
+    if (ev && dayKey && fromDay === dayKey && (mins == null || (ev.time && minsOfDate(ev.time) === mins))) return; // mismo sitio
+    if (src === 'due') { local.due = body.due = dayKey ? moveToDay(card.due, dayKey, mins) : null; }
     else if (src === 'start') { local.start = body.start = dayKey ? moveToDay(card.start, dayKey) : null; }
     else if (src === 'range') {
       if (!dayKey) { local.start = body.start = null; local.due = body.due = null; }
-      else if (ev && fromDay) {
+      else if (ev && mins != null && card.due) {
+        var dd = diffDays(key(new Date(card.due)), dayKey);
+        if (card.start) local.start = body.start = shiftIso(card.start, dd);
+        local.due = body.due = moveToDay(card.due, dayKey, mins);
+      } else if (ev && fromDay) {
         var delta = diffDays(fromDay, dayKey);
         if (card.start) local.start = body.start = shiftIso(card.start, delta);
         if (card.due) local.due = body.due = shiftIso(card.due, delta);
-      } else { local.due = body.due = moveToDay(null, dayKey); }
+      } else { local.due = body.due = moveToDay(null, dayKey, mins); }
     } else if (src.indexOf('cf:') === 0) {
       cfId = src.slice(3);
       var item = (card.customFieldItems || []).filter(function (i) { return i.idCustomField === cfId; })[0];
-      var iso = dayKey ? moveToDay(item && item.value && item.value.date, dayKey) : null;
+      var iso = dayKey ? moveToDay(item && item.value && item.value.date, dayKey, mins) : null;
       local.cf = iso;
     }
-    if (ev && dayKey && fromDay === dayKey) return; // soltado en el mismo día
 
     // Actualización optimista
     var backup = JSON.parse(JSON.stringify(card));
@@ -461,7 +701,7 @@
       ? apiPut('/cards/' + card.id + '/customField/' + cfId + '/item', { value: local.cf ? { date: local.cf } : '' })
       : apiPut('/cards/' + card.id, body);
     p.then(function () {
-      toast(dayKey ? '“' + card.name + '” → ' + fmt(fromKey(dayKey), { weekday: 'short', day: 'numeric', month: 'short' })
+      toast(dayKey ? '“' + card.name + '” → ' + fmt(fromKey(dayKey), { weekday: 'short', day: 'numeric', month: 'short' }) + (mins != null ? ' · ' + hhmm(mins) : '')
                    : 'Fecha quitada de “' + card.name + '”');
     }).catch(function (err) {
       Object.keys(backup).forEach(function (k) { card[k] = backup[k]; });
@@ -514,13 +754,41 @@
 
   // ───────────────────────── Eventos de UI ─────────────────────────
   function bindUi() {
-    $('today').onclick = function () { state.cursor = startOfDay(new Date()); render(); };
+    $('today').onclick = function () { state.cursor = startOfDay(new Date()); state.monthShown = null; render(); };
     $('prev').onclick = function () { move(-1); };
     $('next').onclick = function () { move(1); };
     $('refresh').onclick = function () { load().then(function () { toast('Actualizado'); }); };
     $('detailBtn').onclick = function () {
       state.prefs.detail = !detailOn(); savePrefs(); render();
     };
+    $('moreBtn').onclick = function (e) { e.stopPropagation(); $('moreMenu').hidden = !$('moreMenu').hidden; };
+    $('moreMenu').onclick = function (e) {
+      var b = e.target.closest('[data-more]'); if (!b) return;
+      $('moreMenu').hidden = true;
+      var w = b.getAttribute('data-more');
+      if (w === 'refresh') $('refresh').click();
+      else if (w === 'ics') exportIcs();
+      else if (w === 'news' && window.CalWhatsNew) window.CalWhatsNew.show(t);
+    };
+    document.addEventListener('click', function (e) { if (!e.target.closest('.menu-w')) $('moreMenu').hidden = true; });
+    $('hours').onchange = function (e) { state.prefs.hours = e.target.value; state.weekShown = null; savePrefs(); render(); };
+    $('chips').addEventListener('change', function (e) {
+      if (e.target.id !== 'colorBy') return;
+      state.prefs.colorBy = e.target.value === state.cfg.colorBy ? null : e.target.value; savePrefs(); render();
+    });
+    $('chips').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-unf]'); if (!b) return;
+      var k = b.getAttribute('data-unf'), v = b.getAttribute('data-v'), p = state.prefs;
+      var drop = function (arr) { var i = arr.indexOf(v); if (i !== -1) arr.splice(i, 1); };
+      if (k === 'all') { p.hiddenLists = []; p.labels = []; p.members = []; p.completed = null; p.weekends = null; state.q = ''; $('q').value = ''; }
+      else if (k === 'q') { state.q = ''; $('q').value = ''; }
+      else if (k === 'list') drop(p.hiddenLists);
+      else if (k === 'label') drop(p.labels);
+      else if (k === 'member') drop(p.members);
+      else if (k === 'completed') p.completed = true;
+      else if (k === 'weekends') p.weekends = true;
+      renderFilters(); savePrefs(); render();
+    });
     document.querySelectorAll('[data-view]').forEach(function (b) {
       b.onclick = function () { setView(b.getAttribute('data-view')); };
     });
@@ -564,16 +832,23 @@
     document.body.addEventListener('click', function (e) {
       var more = e.target.closest('.more');
       if (more) { state.cursor = fromKey(more.getAttribute('data-goto')); setView('week'); return; }
+      if (e.target.closest('#quick, #peek')) return;
       var add = e.target.closest('[data-add]');
-      if (add) { e.stopPropagation(); openNew(add.getAttribute('data-add')); return; }
+      if (add) { e.stopPropagation(); openNew(add.getAttribute('data-add'), add.closest('[data-date]') || add); return; }
       var ev = e.target.closest('.ev');
       if (ev) { openCard(ev.getAttribute('data-id')); return; }
+      if (!e.target.closest('#cal')) return;
+      // Clic en una hora libre de la semana → nueva tarjeta a esa hora
+      var slot = e.target.closest('[data-slot]');
+      if (slot && state.canEdit) { openNew(slot.getAttribute('data-date'), slot, slotMins(slot, e.clientY, 30), e.clientY); return; }
       // Clic en el hueco libre de un día → nueva tarjeta
-      var day = e.target.closest('.day');
-      if (day && state.canEdit && !e.target.closest('.more') && e.target.closest('#cal')) openNew(day.getAttribute('data-date'));
+      var day = e.target.closest('.day, [data-allday]');
+      if (day && state.canEdit) openNew(day.getAttribute('data-date'), day);
     });
     document.body.addEventListener('keydown', function (e) {
-      if (e.target.matches('input, select, textarea') || !$('dlg').hidden || window.CalCardView.isOpen()) return;
+      if (e.key === 'Escape' && e.target.id === 'q') { e.target.blur(); return; }
+      if (e.target.matches('input, select, textarea') || !$('dlg').hidden || window.CalCardView.isOpen() || $('quick')) return;
+      if (e.key === '/') { e.preventDefault(); $('q').focus(); $('q').select(); return; }
       if (e.key === 'Enter' && e.target.classList.contains('ev')) openCard(e.target.getAttribute('data-id'));
       else if (e.key === 'ArrowLeft') move(-1);
       else if (e.key === 'ArrowRight') move(1);
@@ -590,6 +865,7 @@
       if (!ev) return;
       if (!state.canWrite) { e.preventDefault(); askAuth('Para mover tarjetas de día, autoriza una vez el calendario.'); return; }
       drag = { id: ev.getAttribute('data-id'), from: ev.getAttribute('data-from') };
+      hidePeek();
       ev.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', drag.id);
@@ -599,12 +875,27 @@
       clearDrop(); drag = null;
     });
     function dropTarget(e) { return e.target.closest && (e.target.closest('[data-date]') || e.target.closest('#unsched')); }
-    function clearDrop() { document.querySelectorAll('.drop').forEach(function (x) { x.classList.remove('drop'); }); }
+    function clearDrop() {
+      document.querySelectorAll('.drop').forEach(function (x) { x.classList.remove('drop'); });
+      var g = document.getElementById('ghost'); if (g) g.remove();
+    }
     document.body.addEventListener('dragover', function (e) {
       if (!drag) return;
       var tg = dropTarget(e);
       if (!tg) return;
       e.preventDefault();
+      hidePeek();
+      if (tg.hasAttribute('data-slot')) {
+        // Hueco con hora: bloque fantasma que dice dónde caerá
+        document.querySelectorAll('.drop').forEach(function (x) { x.classList.remove('drop'); });
+        var m = slotMins(tg, e.clientY, 15), h0 = +tg.getAttribute('data-h0');
+        var g = document.getElementById('ghost');
+        if (!g || g.parentNode !== tg) { if (g) g.remove(); g = document.createElement('div'); g.id = 'ghost'; tg.appendChild(g); }
+        g.style.top = ((m - h0 * 60) / 60 * HR + 1) + 'px'; g.style.height = (HR - 3) + 'px';
+        g.textContent = '↳ ' + fmt(fromKey(tg.getAttribute('data-date')), { weekday: 'short', day: 'numeric' }) + ' · ' + hhmm(m);
+        return;
+      }
+      var gg = document.getElementById('ghost'); if (gg) gg.remove();
       if (!tg.classList.contains('drop')) { clearDrop(); tg.classList.add('drop'); }
     });
     document.body.addEventListener('drop', function (e) {
@@ -616,16 +907,119 @@
       var card = state.cards.filter(function (c) { return c.id === drag.id; })[0];
       if (!card) return;
       if (tg.id === 'unsched') { if (drag.from) reschedule(card, null, drag.from); }
-      else reschedule(card, tg.getAttribute('data-date'), drag.from);
+      else reschedule(card, tg.getAttribute('data-date'), drag.from, tg.hasAttribute('data-slot') ? slotMins(tg, e.clientY, 15) : null);
     });
 
     $('authBtn').onclick = function () { askAuth('Autoriza una vez el calendario para mover y crear tarjetas.'); };
     bindDialog();
   }
 
+  // Minutos (redondeados a `step`) del punto y de una columna con horas.
+  function slotMins(col, clientY, step) {
+    var r = col.getBoundingClientRect(), h0 = +col.getAttribute('data-h0'), h1 = +col.getAttribute('data-h1');
+    var m = h0 * 60 + (clientY - r.top) / HR * 60;
+    m = Math.round(m / step) * step;
+    return Math.max(h0 * 60, Math.min(h1 * 60 - step, m));
+  }
   function openCard(id) {
     var card = state.cards.filter(function (c) { return c.id === id; })[0];
-    if (card) window.CalCardView.open(card);
+    if (!card) return;
+    hidePeek(); closeQuick();
+    state.selId = id;
+    document.querySelectorAll('.ev.sel').forEach(function (x) { x.classList.remove('sel'); });
+    document.querySelectorAll('.ev[data-id="' + id + '"]').forEach(function (x) { x.classList.add('sel'); });
+    window.CalCardView.open(card);
+  }
+  // Tarjetas del mismo día (en el orden del calendario) para pasar de una a otra desde la tarjeta.
+  function siblings(card) {
+    var ev = eventOf(card); if (!ev) return null;
+    var k = ev.endKey, items = (state.lastIdx[k] || buildIndex().idx[k] || []);
+    var ids = items.map(function (it) { return it.card.id; });
+    if (ids.indexOf(card.id) === -1) return null;
+    return { ids: ids, i: ids.indexOf(card.id), label: fmt(fromKey(k), { weekday: 'short', day: 'numeric' }) };
+  }
+
+  // ───── Vista rápida al pasar el ratón ─────
+  var peekTimer = null, peekHide = null, peekFor = null;
+  function hidePeek() { clearTimeout(peekTimer); clearTimeout(peekHide); var p = $('peek'); if (p) p.remove(); peekFor = null; }
+  function plainCopy(card) {
+    var txt = card.desc || '';
+    if (window.CalSocial) { var nets = CalSocial.detect(card); txt = CalSocial.copyFor(txt, nets[0] ? nets[0].net : null).text; }
+    txt = txt.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/^\s*(#{1,6}|>|-{3,})\s*/gm, '').replace(/[*_~`]+/g, '').replace(/\s+/g, ' ').trim();
+    return txt.length > 170 ? txt.slice(0, 170).replace(/\s+\S*$/, '') + '…' : txt;
+  }
+  function showPeek(el) {
+    var card = state.cards.filter(function (c) { return c.id === el.getAttribute('data-id'); })[0];
+    if (!card || window.CalCardView.isOpen() || $('quick') || !document.body.contains(el)) return;
+    hidePeek(); peekFor = card.id;
+    var th = thumbFor(card), list = state.listById[card.idList], d = card.due ? new Date(card.due) : null;
+    var labels = (card.labels || []).map(function (l) {
+      var bg = S.labelColor(l.color);
+      return '<span class="lb" style="background:' + bg + ';color:' + S.textOn(bg) + '">' + esc(l.name || '') + '</span>';
+    }).join('');
+    var mem = (card.members || []).map(function (m) { return '<span class="av" title="' + esc(m.fullName) + '"' + (m.avatar ? ' style="background-image:url(' + esc(m.avatar) + '/30.png)">' : '>' + esc(m.initials || '')) + '</span>'; }).join('');
+    var copy = plainCopy(card);
+    var vid = (card.attachments || []).some(function (a) { return /^video\//.test(a.mimeType || '') || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(a.name || ''); });
+    var p = document.createElement('div');
+    p.id = 'peek'; p.className = 'peek';
+    p.innerHTML = (th ? '<div class="pk-img"><img src="' + esc(th) + '" alt="" onerror="this.parentNode.remove()">' + (vid ? '<span>▶</span>' : '') + '</div>' : '') +
+      '<div class="pk-b">' + (labels ? '<div class="pk-lb">' + labels + '</div>' : '') +
+      '<h4>' + esc(card.name) + '</h4>' +
+      '<div class="pk-r">' + (d ? '<span class="' + (isLate(card) ? 'late' : '') + '">📅 ' + esc(fmt(d, { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' + esc(fmtTime(d)) + '</span>' : '') +
+      (list ? '<span class="status" style="--lc:' + S.hashColor(list.id) + '"><i></i>' + esc(list.name) + '</span>' : '') + mem + '</div>' +
+      (copy ? '<div class="pk-copy">' + esc(copy) + '</div>' : '') +
+      '<div class="pk-acts"><button class="btn" data-pk="open">Abrir</button>' +
+      (state.canEdit && card.due ? '<button class="btn" data-pk="done">' + (card.dueComplete ? '↺ Pendiente' : '✓ Completar') + '</button>' : '') +
+      (state.canEdit ? '<label class="btn pk-move">Mover a… <select data-pk="move">' + '<option value="">—</option>' + state.lists.map(function (l) {
+        return '<option value="' + esc(l.id) + '"' + (l.id === card.idList ? ' disabled' : '') + '>' + esc(l.name) + '</option>';
+      }).join('') + '</select></label>' : '') + '</div></div>';
+    document.body.appendChild(p);
+    var r = el.getBoundingClientRect(), pw = p.offsetWidth, ph = p.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+    var x = r.right + 8 + pw < vw ? r.right + 8 : Math.max(8, r.left - pw - 8);
+    var y = Math.max(8, Math.min(vh - ph - 8, r.top - 10));
+    p.style.left = x + 'px'; p.style.top = y + 'px';
+    p.addEventListener('mouseenter', function () { clearTimeout(peekHide); });
+    p.addEventListener('mouseleave', function () { peekHide = setTimeout(hidePeek, 250); });
+    p.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pk]'); if (!b || b.tagName === 'SELECT') return;
+      var w = b.getAttribute('data-pk');
+      if (w === 'open') openCard(card.id);
+      else if (w === 'done') quickSave(card, { dueComplete: !card.dueComplete }, card.dueComplete ? 'Marcada como pendiente' : 'Completada: “' + card.name + '”');
+    });
+    p.addEventListener('change', function (e) {
+      if (e.target.getAttribute('data-pk') === 'move' && e.target.value) {
+        var l = state.listById[e.target.value];
+        quickSave(card, { idList: e.target.value }, '“' + card.name + '” → ' + (l ? l.name : ''));
+      }
+    });
+  }
+  // Cambio rápido (vista rápida): optimista y con vuelta atrás si falla.
+  function quickSave(card, body, msg) {
+    if (!state.canWrite) { askAuth('Para cambiar tarjetas desde el calendario, autoriza una vez el calendario.'); return; }
+    var backup = JSON.parse(JSON.stringify(card));
+    Object.keys(body).forEach(function (k) { card[k] = body[k]; });
+    hidePeek(); render();
+    apiPut('/cards/' + card.id, body).then(function () { toast(msg); }).catch(function (err) {
+      Object.keys(backup).forEach(function (k) { card[k] = backup[k]; }); render();
+      toast('No se pudo guardar: ' + (err && err.message ? err.message : err), true);
+    });
+  }
+  function bindPeek() {
+    document.body.addEventListener('mouseover', function (e) {
+      var ev = e.target.closest && e.target.closest('#cal .ev, #unsched .ev');
+      if (!ev) return;
+      clearTimeout(peekHide);
+      if (peekFor === ev.getAttribute('data-id')) return;
+      clearTimeout(peekTimer);
+      peekTimer = setTimeout(function () { showPeek(ev); }, 450);
+    });
+    document.body.addEventListener('mouseout', function (e) {
+      var ev = e.target.closest && e.target.closest('#cal .ev, #unsched .ev');
+      if (!ev || (e.relatedTarget && ev.contains(e.relatedTarget))) return;
+      clearTimeout(peekTimer);
+      peekHide = setTimeout(hidePeek, 250);
+    });
+    $('cal').addEventListener('scroll', hidePeek, true);
   }
   function openInTrello(card) {
     // Abre la tarjeta nativa de Trello (cierra el calendario).
@@ -648,6 +1042,10 @@
       lists: function () { return state.lists; },
       me: function () { return state.me; },
       onChange: function () { render(); },
+      siblings: siblings,
+      openCard: openCard,
+      listColor: S.hashColor,
+      boardName: function () { return (state.board && state.board.name) || ''; },
       openInTrello: openInTrello,
       toast: toast,
       labelColor: S.labelColor, textOn: S.textOn,
@@ -713,58 +1111,81 @@
   }
 
   // ───────────────────────── Nueva tarjeta ─────────────────────────
-  var dlgKey = null;
   function showDialog(which) {
     $('dlg').hidden = false;
     $('dlgAuth').hidden = which !== 'auth';
-    $('nForm').hidden = which !== 'new';
   }
-  function closeDialog() { $('dlg').hidden = true; dlgKey = null; }
+  function closeDialog() { $('dlg').hidden = true; }
 
-  function openNew(dayKey) {
+  // ───── Crear en línea: mini formulario junto al día (o la hora) ─────
+  var quickCtx = null;
+  function closeQuick() { var q = $('quick'); if (q) q.remove(); quickCtx = null; }
+  function openNew(dayKey, anchor, mins, clientY) {
     if (!state.canEdit) return;
     if (!state.canWrite) { askAuth('Para crear tarjetas desde el calendario, autoriza una vez el calendario.', dayKey); return; }
-    dlgKey = dayKey;
-    $('nTitle').textContent = 'Nueva tarjeta · ' + fmt(fromKey(dayKey), { weekday: 'long', day: 'numeric', month: 'long' });
+    hidePeek(); closeQuick();
+    var src = source(), showTime = srcHasTime();
+    if (mins == null) mins = state.cfg.defaultHour * 60;
     var lastList = state.prefs.lastList;
     if (!state.listById[lastList]) lastList = state.lists[0] && state.lists[0].id;
-    $('nList').innerHTML = state.lists.map(function (l) {
-      return '<option value="' + esc(l.id) + '"' + (l.id === lastList ? ' selected' : '') + '>' + esc(l.name) + '</option>';
-    }).join('');
-    $('nTpl').innerHTML = '<option value="">Sin plantilla</option>' + state.templates.map(function (c) {
-      return '<option value="' + esc(c.id) + '"' + (c.id === state.prefs.lastTpl ? ' selected' : '') + '>' + esc(c.name) + '</option>';
-    }).join('');
-    $('nTplRow').hidden = false;
-    $('nTplHint').textContent = state.templates.length ? '' :
-      'No hay plantillas en este tablero. Crea una tarjeta y márcala como plantilla en Trello para que aparezca aquí.';
-    var src = source(), showTime = src === 'due' || src === 'range' || src.indexOf('cf:') === 0;
-    $('nTimeRow').hidden = !showTime;
-    $('nTime').value = pad(state.cfg.defaultHour) + ':00';
-    $('nName').value = ''; $('nName').placeholder = 'Nombre de la tarjeta';
-    delete $('nList').dataset.touched;
-    showDialog('new');
-    setTimeout(function () { $('nName').focus(); }, 30);
+    var q = document.createElement('form');
+    q.id = 'quick'; q.className = 'quick'; q.autocomplete = 'off';
+    q.innerHTML = '<input class="q-name" type="text" placeholder="Nombre de la tarjeta" aria-label="Nombre de la tarjeta">' +
+      '<div class="q-row">' +
+      '<label class="selectlike"><small>Lista:</small><select class="q-list">' + state.lists.map(function (l) {
+        return '<option value="' + esc(l.id) + '"' + (l.id === lastList ? ' selected' : '') + '>' + esc(l.name) + '</option>';
+      }).join('') + '</select></label>' +
+      (showTime ? '<input class="q-time" type="time" value="' + hhmm(mins) + '" aria-label="Hora">' : '') +
+      (state.templates.length ? '<label class="selectlike"><small>Plantilla:</small><select class="q-tpl"><option value="">—</option>' + state.templates.map(function (c) {
+        return '<option value="' + esc(c.id) + '"' + (c.id === state.prefs.lastTpl ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+      }).join('') + '</select></label>' : '') +
+      '</div><div class="q-f"><span>' + esc(fmt(fromKey(dayKey), { weekday: 'short', day: 'numeric', month: 'short' })) +
+      ' · <kbd>Enter</kbd> crear · <kbd>⇧ Enter</kbd> crear y abrir</span><button type="button" class="btn ghost q-x" aria-label="Cancelar">✕</button></div>';
+    document.body.appendChild(q);
+    quickCtx = { dayKey: dayKey, src: src };
+    // Posición: al lado del día / hueco, dentro de la ventana
+    var r = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : { left: innerWidth / 2 - 150, right: innerWidth / 2 + 150, top: 120, bottom: 120 };
+    var w = q.offsetWidth, h = q.offsetHeight;
+    var x = r.right + 8 + w < innerWidth ? r.right + 8 : r.left - w - 8;
+    if (x < 8) x = Math.max(8, Math.min(innerWidth - w - 8, r.left));
+    var y = clientY != null ? clientY - 20 : r.top + 4;
+    q.style.left = x + 'px'; q.style.top = Math.max(8, Math.min(innerHeight - h - 8, y)) + 'px';
+    var name = q.querySelector('.q-name'), tplSel = q.querySelector('.q-tpl'), listSel = q.querySelector('.q-list');
+    if (tplSel) tplSel.onchange = function () {
+      var tpl = state.templates.filter(function (c) { return c.id === tplSel.value; })[0];
+      if (tpl && !name.value) name.placeholder = tpl.name;
+      if (tpl && tpl.idList && state.listById[tpl.idList] && !listSel.dataset.touched) listSel.value = tpl.idList;
+    };
+    listSel.onchange = function () { listSel.dataset.touched = '1'; };
+    q.querySelector('.q-x').onclick = closeQuick;
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeQuick(); }
+      else if (e.key === 'Enter' && e.target.tagName !== 'SELECT') { e.preventDefault(); createCard(e.shiftKey); }
+    });
+    q.onsubmit = function (e) { e.preventDefault(); createCard(false); };
+    setTimeout(function () { name.focus(); }, 20);
   }
+  document.addEventListener('mousedown', function (e) {
+    if ($('quick') && !e.target.closest('#quick') && !e.target.closest('[data-add]')) closeQuick();
+  });
 
-  function onTplChange() {
-    var tpl = state.templates.filter(function (c) { return c.id === $('nTpl').value; })[0];
-    if (tpl && !$('nName').value) $('nName').placeholder = tpl.name;
-    if (tpl && tpl.idList && state.listById[tpl.idList] && !$('nList').dataset.touched) $('nList').value = tpl.idList;
-  }
-
-  function createCard() {
-    var key = dlgKey, name = $('nName').value.trim(), idList = $('nList').value, tplId = $('nTpl').value;
+  function createCard(openAfter) {
+    var q = $('quick'); if (!q || !quickCtx) return;
+    var key = quickCtx.dayKey, src = quickCtx.src;
+    var name = q.querySelector('.q-name').value.trim(), idList = q.querySelector('.q-list').value;
+    var tplSel = q.querySelector('.q-tpl'), tplId = tplSel ? tplSel.value : '';
     var tpl = state.templates.filter(function (c) { return c.id === tplId; })[0];
     if (!name && tpl) name = tpl.name;
-    if (!name) { $('nName').focus(); return; }
-    var hm = ($('nTime').value || (pad(state.cfg.defaultHour) + ':00')).split(':');
+    if (!name) { q.querySelector('.q-name').focus(); return; }
+    var tIn = q.querySelector('.q-time');
+    var hm = ((tIn && tIn.value) || (pad(state.cfg.defaultHour) + ':00')).split(':');
     var d = fromKey(key); d.setHours(+hm[0] || 0, +hm[1] || 0, 0, 0);
-    var iso = d.toISOString(), src = source();
+    var iso = d.toISOString();
     var body = { idList: idList, name: name, pos: 'bottom' };
     if (src === 'start') body.start = iso;
     else if (src === 'due' || src === 'range') body.due = iso;
     if (tpl) { body.idCardSource = tpl.id; body.keepFromSource = 'all'; }
-    $('nCreate').disabled = true;
+    q.classList.add('busy');
     apiRequest('POST', '/cards', body).then(function (card) {
       if (src.indexOf('cf:') === 0 && card && card.id) {
         return apiPut('/cards/' + card.id + '/customField/' + src.slice(3) + '/item', { value: { date: iso } }).then(function () { return card; });
@@ -772,12 +1193,13 @@
       return card;
     }).then(function (card) {
       state.prefs.lastList = idList; state.prefs.lastTpl = tplId; savePrefs();
-      closeDialog();
+      closeQuick();
       toast('Tarjeta creada: “' + name + '”');
-      load();
+      return load().then(function () { if (openAfter && card && card.id) openCard(card.id); });
     }).catch(function (err) {
+      if (q) q.classList.remove('busy');
       toast('No se pudo crear la tarjeta: ' + (err && err.message ? err.message : err), true);
-    }).then(function () { $('nCreate').disabled = false; });
+    });
   }
 
   function bindDialog() {
@@ -789,9 +1211,6 @@
       var after = pendingNew; pendingNew = null;
       doAuthorize().then(function (ok) { if (ok && after) openNew(after); });
     };
-    $('nTpl').onchange = onTplChange;
-    $('nList').onchange = function () { $('nList').dataset.touched = '1'; };
-    $('nForm').onsubmit = function (e) { e.preventDefault(); createCard(); };
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) closeDialog(); });
   }
 
@@ -854,13 +1273,22 @@
       var p = r[4] || {};
       ['hiddenLists', 'labels', 'members'].forEach(function (k) { if (!Array.isArray(p[k])) p[k] = []; });
       state.prefs = Object.assign(state.prefs, p);
-      if (!state.loaded) {
+      var first = !state.loaded, want = null;
+      if (first) {
         state.view = state.prefs.view || state.cfg.defaultView;
         state.loaded = true;
+        // Abierto desde el botón «Abrir en el calendario» de una tarjeta: ir a su fecha y abrirla.
+        var wid = (location.search.match(/[?&]card=([\w-]+)/) || [])[1] || (t.arg && t.arg('card'));
+        if (wid) want = state.cards.filter(function (c) { return c.id === wid || c.shortLink === wid; })[0] || null;
+        var wev = want && eventOf(want);
+        if (wev) state.cursor = fromKey(wev.endKey);
+        if (want) state.selId = want.id;
+        if (wid && !want) setTimeout(function () { toast('No se encuentra esa tarjeta (puede estar archivada)', true); }, 300);
       }
       renderSourceSelect();
       renderFilters();
       render();
+      if (want) openCard(want.id);
       ensureUsernames();
     }).catch(function (err) {
       $('cal').innerHTML = '<div class="empty">No se pudieron cargar las tarjetas: ' + esc(err && err.message) + '</div>';
@@ -871,6 +1299,7 @@
   // ───────────────────────── Arranque ─────────────────────────
   $('cal').innerHTML = '<div class="loading">Cargando tarjetas…</div>';
   bindUi();
+  bindPeek();
   initCardView();
   Promise.resolve(t.member && t.member('id', 'fullName', 'initials', 'avatar')).then(function (m) { state.me = m || null; }).catch(function () {});
   // t.render se dispara cuando cambian los datos del tablero → calendario en vivo.
@@ -880,6 +1309,14 @@
   } else {
     load();
   }
+  // Línea de «ahora» en la vista Semana: se mueve sola cada minuto.
+  setInterval(function () {
+    var n = document.querySelector('.wk-col.today .now'), col = n && n.parentNode;
+    if (!n) return;
+    var m = minsOf(new Date()), h0 = +col.getAttribute('data-h0'), h1 = +col.getAttribute('data-h1');
+    if (m > h1 * 60) { render(); return; }
+    n.style.top = ((m - h0 * 60) / 60 * HR) + 'px'; n.querySelector('span').textContent = hhmm(m);
+  }, 60000);
   // Pantalla de novedades (js/whatsnew.js). Para quitarla, borra esta línea y ese archivo.
   if (window.CalWhatsNew) setTimeout(function () { window.CalWhatsNew.maybeShow(t); }, 700);
 })();

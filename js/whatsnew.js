@@ -7,16 +7,20 @@
 (function () {
   'use strict';
 
-  var VERSION = '2026-11-drive';
+  var VERSION = '2026-11-rediseno';
   var KEY = 'novedades';
 
   var ITEMS = [
-    { ico: '⬆️', t: 'Sube archivos desde la tarjeta',
-      d: 'Botón «＋ Subir» junto a los adjuntos. Hasta 10 MB van a Trello como siempre; los más grandes, a Google Drive.' },
-    { ico: '📁', t: 'Archivos grandes en Google Drive',
-      d: 'La primera vez pulsa «Conectar Google Drive». Se guardan en una carpeta del tablero en tu Drive y se pueden ver con el enlace.' },
-    { ico: '🎬', t: 'Vista previa de Drive',
-      d: 'Los enlaces de Drive se ven con miniatura, y vídeos, PDF y presentaciones se abren sin salir de la tarjeta.' }
+    { ico: '🗓', t: 'Semana con horas',
+      d: 'Cada tarjeta a su hora, línea de «ahora» y fila «Todo el día». Al arrastrar cambias el día y la hora; un clic en un hueco crea una tarjeta a esa hora.' },
+    { ico: '👀', t: 'Vista rápida y crear en línea',
+      d: 'Pasa el ratón por una tarjeta para ver su copy y completarla o moverla sin abrirla. El «+» de cada día abre un mini formulario ahí mismo.' },
+    { ico: '🃏', t: 'Tarjeta nueva',
+      d: 'Estado, fecha y responsables arriba; el copy en bloques con contador; checklist con progreso; archivos y conversación a la derecha. J / K para pasar a la siguiente tarjeta del día.' },
+    { ico: '📱', t: 'Vista previa lado a lado',
+      d: 'Todas las redes a la vez, el copy se edita con la vista previa en directo y hay una revisión antes de publicar.' },
+    { ico: '⬆️', t: 'Sube archivos arrastrando o pegando',
+      d: 'Suéltalos en la tarjeta o pégalos con ⌘V. También los vídeos grandes.' }
   ];
 
   var CSS = '' +
@@ -54,7 +58,7 @@
     var w = document.createElement('div');
     w.className = 'wn-wrap';
     w.innerHTML = '<div class="wn" role="dialog" aria-modal="true" aria-labelledby="wn-t">' +
-      '<p class="wn-k">Novedades</p><h2 id="wn-t">Las tarjetas del calendario se han renovado</h2><ul>' +
+      '<p class="wn-k">Novedades</p><h2 id="wn-t">El calendario se ha renovado</h2><ul>' +
       ITEMS.map(function (it) {
         return '<li><span class="wn-i" aria-hidden="true">' + it.ico + '</span><div><strong>' + esc(it.t) + '</strong><span>' + esc(it.d) + '</span></div></li>';
       }).join('') +

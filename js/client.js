@@ -9,9 +9,13 @@
 
   function todayIcon() { return BASE + 'img/day/' + new Date().getDate() + '.svg?v=4'; }
 
-  function openCalendar(t) {
+  var TEST = /\/pruebas\//.test(BASE);
+  var OPEN_TXT = 'Abrir en el calendario' + (TEST ? ' (pruebas)' : '');
+
+  // cardId (opcional): el calendario se abre en la fecha de esa tarjeta y con ella abierta.
+  function openCalendar(t, cardId) {
     return t.modal({
-      url: './calendar.html?t=' + Date.now(),
+      url: './calendar.html?t=' + Date.now() + (cardId ? '&card=' + encodeURIComponent(cardId) : ''),
       fullscreen: true,
       title: 'Calendario',
       accentColor: '#0c66e4'
@@ -23,10 +27,27 @@
       return [{
         // Icono a color con la fecha de hoy (sirve igual sobre fondo claro u oscuro).
         icon: { dark: todayIcon(), light: todayIcon() },
-        text: /\/pruebas\//.test(BASE) ? 'Calendario (pruebas)' : 'Calendario',
+        text: TEST ? 'Calendario (pruebas)' : 'Calendario',
         condition: 'always',
         callback: openCalendar
       }];
+    },
+
+    // En cada tarjeta de Trello: acceso directo a esa tarjeta en el calendario.
+    // Insignia roja junto al título (lo más visible)…
+    'card-detail-badges': function (t) {
+      return [{ title: 'Calendario', text: '📅 ' + OPEN_TXT, color: 'red',
+        callback: function (t2) { return openCalendar(t2, t2.getContext().card); } }];
+    },
+    // …una sección con botón grande en el cuerpo de la tarjeta…
+    'card-back-section': function (t) {
+      return { title: 'Calendario' + (TEST ? ' (pruebas)' : ''), icon: ICON_LIGHT,
+        content: { type: 'iframe', url: t.signUrl('./cardback.html'), height: 56 } };
+    },
+    // …y un botón en la lista de botones de la tarjeta.
+    'card-buttons': function () {
+      return [{ icon: ICON_LIGHT, text: OPEN_TXT, condition: 'always',
+        callback: function (t) { return openCalendar(t, t.getContext().card); } }];
     },
 
     'show-settings': function (t) {

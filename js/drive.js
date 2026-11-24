@@ -104,7 +104,7 @@
     return loadGis().then(start);
   }
   function token() {
-    return hasToken() ? Promise.resolve(tok.t) : Promise.reject(new Error('Conecta Google Drive'));
+    return hasToken() ? Promise.resolve(tok.t) : Promise.reject(new Error('Falta dar permiso para subir'));
   }
   function gapi(method, path, body, extraHeaders) {
     return token().then(function (t) {
@@ -127,7 +127,7 @@
   // Solo funciona con archivos que ve esta app (los subidos desde el calendario).
   var apiThumbs = {};
   function apiThumb(id) {
-    if (!hasToken()) return Promise.reject(new Error('Sin conexión con Drive'));
+    if (!hasToken()) return Promise.reject(new Error('Falta dar permiso para subir'));
     if (!apiThumbs[id]) {
       apiThumbs[id] = gapi('GET', '/files/' + encodeURIComponent(id) + '?fields=thumbnailLink&supportsAllDrives=true')
         .then(function (r) { return r.json(); })
@@ -200,7 +200,7 @@
           if (x.status >= 200 && x.status < 300) { try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(e); } }
           else reject(new Error(googleError(x.responseText) || ('Google respondió ' + x.status)));
         };
-        x.onerror = function () { reject(new Error('Fallo de red subiendo a Drive')); };
+        x.onerror = function () { reject(new Error('Fallo de red al subir')); };
         x.send(file);
       });
     }).then(function (f) {

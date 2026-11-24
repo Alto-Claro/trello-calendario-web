@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <!-- Sección «Calendario» dentro de cada tarjeta de Trello: botón grande para abrirla en el calendario. -->
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 4px 2px 8px; }
+    button { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 6px; background: #c9372c; color: #fff;
+      font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1; padding: 11px 18px; cursor: pointer; box-shadow: 0 1px 2px rgba(9,30,66,.25); }
+    button:hover { background: #ae2e24; }
+    button:focus-visible { outline: 2px solid #fd9891; outline-offset: 2px; }
+    span { font-size: 13px; color: #626f86; }
+    @media (prefers-color-scheme: dark) { span { color: #9fadbc; } }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <button id="go" type="button">📅 Abrir en el calendario</button>
+    <span>Copy, vista previa en redes, archivos y conversación.</span>
+  </div>
+  <script>
+    var t = window.TrelloPowerUp.iframe();
+    var test = /\/pruebas\//.test(location.pathname);
+    if (test) document.getElementById('go').textContent = '📅 Abrir en el calendario (pruebas)';
+    document.getElementById('go').addEventListener('click', function () {
+      var id = t.getContext().card;
+      t.modal({
+        url: './calendar.html?t=' + Date.now() + '&card=' + encodeURIComponent(id),
+        fullscreen: true,
+        title: 'Calendario',
+        accentColor: '#0c66e4'
+      });
+    });
+    t.render(function () { t.sizeTo('body'); });
+  </script>
+</body>
+</html>

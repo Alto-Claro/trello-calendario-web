@@ -10,7 +10,7 @@ window.CAL_CONFIG = {
   APP_NAME: 'Calendario Libre',
   APP_AUTHOR: 'Alto y Claro',
   // Intermediario de descargas (carpeta worker/, Cloudflare). Vacío = los adjuntos solo se abren.
-  DOWNLOAD_URL: 'https://calendario-descargas.altoyclaro.workers.dev',
+  DOWNLOAD_URL: '',   // desactivado: no se usa Cloudflare (solo Trello + Google Drive)
   // Los archivos de hasta estos MB se suben a Trello; los más grandes, a Cloudflare R2 a través del
   // intermediario (solo si el Worker tiene el bucket R2; si no, el botón «Subir» no aparece).
   TRELLO_MAX_MB: 10,
