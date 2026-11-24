@@ -81,7 +81,30 @@
     throw new Error('No se pudo inicializar el cliente de Trello');
   }
 
+  // Adjuntos guardados en Cloudflare R2 (enlaces a <DOWNLOAD_URL>/f/…): se marcan con a.r2 y, si
+  // llevan miniatura (carpeta acabada en ".t"), se les pone en previews para que todo el calendario
+  // los trate como un adjunto de Trello con vista previa.
+  function r2Fix(a) {
+    var base = String((window.CAL_CONFIG || {}).DOWNLOAD_URL || '').replace(/\/+$/, '');
+    if (!a || !base || a.isUpload || typeof a.url !== 'string' || a.url.indexOf(base + '/f/c/') !== 0) return a;
+    a.r2 = true;
+    var m = a.url.slice(base.length).match(/^\/f\/c\/[0-9a-f]{24}\/[0-9a-f]{32}\.t\//);
+    if (m && !(a.previews || []).some(function (p) { return p.url; })) {
+      a.previews = [{ url: base + m[0] + '_thumb.jpg', width: 640, height: 640 }];
+    }
+    return a;
+  }
+
+  // Marca los adjuntos especiales: R2 (a.r2) y Google Drive (a.drive, ver js/drive.js).
+  function fixAtt(a) {
+    r2Fix(a);
+    if (window.CalDrive) window.CalDrive.fix(a);
+    return a;
+  }
+
   window.CalShared = {
+    r2Fix: r2Fix,
+    fixAtt: fixAtt,
     DEFAULT_CFG: DEFAULT_CFG,
     labelColor: labelColor,
     hashColor: hashColor,

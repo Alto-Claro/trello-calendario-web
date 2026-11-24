@@ -241,12 +241,18 @@
 
     // Adjuntos
     if (attachments.length) {
-      var media = attachments.filter(function (a) { return kindOf(a) !== 'file'; });
-      var files = attachments.filter(function (a) { return kindOf(a) === 'file'; });
+      var media = attachments.filter(function (a) { return kindOf(a) !== 'file' || driveFile(a); });
+      var files = attachments.filter(function (a) { return kindOf(a) === 'file' && !driveFile(a); });
       h += '<section class="cv-sec"><div class="cv-sec-h"><h3>Adjuntos</h3><span class="cv-muted">' + attachments.length + '</span></div>';
       if (media.length) {
         h += '<div class="cv-gallery">' + media.map(function (a) {
           var k = kindOf(a);
+          if (driveFile(a) && k !== 'image') {
+            // Vídeos, PDF y documentos de Drive: miniatura de Drive y se abren en su visor.
+            return '<button class="cv-thumb cv-drive" data-act="drive-view" data-att="' + esc(a.id) + '" title="' + esc(a.name) + '">' +
+              '<img data-media="' + esc(a.id) + '" data-size="thumb" alt="">' + (k === 'video' ? '<span class="cv-play-i">▶</span>' : '') +
+              '<span class="cv-thumb-n">' + esc(a.name) + '</span></button>';
+          }
           if (k === 'image') {
             return '<button class="cv-thumb" data-act="lightbox" data-att="' + esc(a.id) + '" title="' + esc(a.name) + '">' +
               '<img data-media="' + esc(a.id) + '" data-size="thumb" alt="' + esc(a.name) + '"><span class="cv-thumb-n">' + esc(a.name) + '</span></button>';
@@ -289,21 +295,37 @@
     }
 
     h += '</div><aside class="cv-side">';
-    if (attachments.length) {
-      h += '<div class="cv-side-att"><div class="cv-side-h"><span class="cv-h">Adjuntos · ' + attachments.length + '</span>' +
-        (attachments.length > 1 ? '<button class="btn cv-sm" data-act="dl-all" title="Descargar todos los adjuntos">↓ Descargar todo</button>' : '') + '</div>' +
+    var canUp = w && ((upInfo && upInfo.ok) || bigToDrive()), myUps = uploads.filter(function (u) { return u.card === card.id; });
+    if (attachments.length || canUp || myUps.length) {
+      h += '<div class="cv-side-att"><div class="cv-side-h"><span class="cv-h">Adjuntos' + (attachments.length ? ' · ' + attachments.length : '') + '</span>' +
+        '<span class="cv-side-btns">' +
+        (canUp ? '<button class="btn cv-sm" data-act="upload" title="Subir archivos (los de más de ' + TRELLO_MAX_MB + ' MB se guardan en ' + (bigToDrive() ? 'Google Drive' : 'Cloudflare') + ')">＋ Subir</button>' : '') +
+        (attachments.length > 1 ? '<button class="btn cv-sm" data-act="dl-all" title="Descargar todos los adjuntos">↓ Todo</button>' : '') + '</span></div>' +
+        myUps.map(function (u) {
+          return '<div class="cv-up' + (u.err ? ' err' : '') + '" data-up="' + u.id + '"><div class="cv-up-t"><span title="' + esc(u.name) + '">' + esc(u.name) + '</span>' +
+            '<span class="cv-muted" data-up-pct>' + (u.err ? esc(u.err) : upLabel(u)) + '</span></div>' +
+            (u.err ? '<button class="cv-sa-del" data-act="up-dismiss" data-up="' + u.id + '" aria-label="Quitar">×</button>'
+              : u.wait ? '<button class="btn primary cv-sm" data-act="drive-connect">Conectar Google Drive</button>' +
+                '<button class="cv-sa-del" data-act="up-dismiss" data-up="' + u.id + '" aria-label="Cancelar">×</button>'
+              : '<div class="cv-up-bar"><i style="width:' + Math.round(u.pct * 100) + '%"></i></div>') + '</div>';
+        }).join('') +
         attachments.map(function (a) {
           var k = kindOf(a), ext = ((a.name || a.url || '').match(/\.([a-z0-9]{1,5})(\?|$)/i) || [, ''])[1].toUpperCase();
-          var ico = k === 'image'
+          var df = driveFile(a);
+          var ico = k === 'image' || df
             ? '<span class="cv-sa-ico img"><img data-media="' + esc(a.id) + '" data-size="thumb" alt=""></span>'
-            : '<span class="cv-sa-ico">' + (k === 'video' ? '▶' : esc(ext || 'FILE')) + '</span>';
-          var open = k === 'image' ? ' data-act="lightbox" data-att="' + esc(a.id) + '"' : (k === 'video' ? ' data-act="play-side" data-att="' + esc(a.id) + '"' : '');
+            : '<span class="cv-sa-ico">' + (a.drive ? 'DRIVE' : k === 'video' ? '▶' : esc(ext || 'FILE')) + '</span>';
+          var open = k === 'image' ? ' data-act="lightbox" data-att="' + esc(a.id) + '"'
+            : df ? ' data-act="drive-view" data-att="' + esc(a.id) + '"'
+            : (k === 'video' ? ' data-act="play-side" data-att="' + esc(a.id) + '"' : '');
           var nameEl = open
             ? '<button class="cv-sa-name"' + open + ' title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</button>'
             : '<a class="cv-sa-name" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.name) + '">' + esc(a.name || a.url) + '</a>';
           return '<div class="cv-sa">' + ico + '<div class="cv-sa-txt">' + nameEl +
-            '<span class="cv-muted">' + (a.bytes ? fmtBytes(a.bytes) : (a.isUpload === false ? 'Enlace' : '')) + '</span></div>' +
-            (viaWorker(a)
+            '<span class="cv-muted">' + (a.bytes ? fmtBytes(a.bytes) : (a.drive ? 'Google Drive' : a.r2 ? 'Cloudflare' : (a.isUpload === false ? 'Enlace' : ''))) + '</span></div>' +
+            (a.drive && !driveDl(a)
+              ? '<a class="cv-sa-dl" href="' + esc(a.url) + '" target="_blank" rel="noopener" title="Abrir en Google Drive" aria-label="Abrir en Google Drive">↗</a>'
+              : viaWorker(a)
               ? '<button class="cv-sa-dl" data-act="dl-one" data-att="' + esc(a.id) + '" title="Descargar ' + esc(a.name) + '" aria-label="Descargar">↓</button>'
               : '<a class="cv-sa-dl" href="' + esc(dlUrl(a)) + '" target="_blank" rel="noopener" download="' + esc(a.name || '') + '" title="Descargar ' + esc(a.name) + ' (si se abre en una pestaña, guárdalo con ⌘S o clic derecho → Guardar como)" aria-label="Descargar">↓</a>') +
             (w ? '<button class="cv-sa-del" data-act="del-att" data-att="' + esc(a.id) + '" title="Eliminar ' + esc(a.name) + '" aria-label="Eliminar">' +
@@ -344,13 +366,19 @@
   // ───────────────────────── Imágenes y vídeos ─────────────────────────
   var IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic)(\?|$)/i, VID_EXT = /\.(mp4|mov|webm|m4v|ogv)(\?|$)/i;
   function kindOf(a) {
-    var mt = (a.mimeType || '').toLowerCase(), nm = (a.name || '') + ' ' + (a.url || '');
-    if (mt.indexOf('image/') === 0 || (!mt && IMG_EXT.test(nm)) || (mt === 'application/octet-stream' && IMG_EXT.test(nm))) return 'image';
-    if (mt.indexOf('video/') === 0 || (!mt && VID_EXT.test(nm)) || (mt === 'application/octet-stream' && VID_EXT.test(nm))) return 'video';
+    var mt = (a.mimeType || '').toLowerCase();
+    // El nombre y la URL por separado: la extensión tiene que estar al final de uno de los dos.
+    var has = function (re) { return re.test(a.name || '') || re.test(a.url || ''); };
+    if (mt.indexOf('image/') === 0 || (!mt && has(IMG_EXT)) || (mt === 'application/octet-stream' && has(IMG_EXT))) return 'image';
+    if (mt.indexOf('video/') === 0 || (!mt && has(VID_EXT)) || (mt === 'application/octet-stream' && has(VID_EXT))) return 'video';
     return 'file';
   }
   // Enlace de descarga: los adjuntos subidos a Trello se descargan con tu sesión de Trello.
-  function dlUrl(a) { return a.url; }
+  function dlUrl(a) { return a.r2 ? a.url + '?dl=1' : driveDl(a) ? window.CalDrive.dlUrl(a.drive.id) : a.url; }
+  // Adjuntos de Google Drive (js/drive.js): archivos con miniatura (no carpetas) y si se pueden descargar tal cual.
+  function driveFile(a) { return !!(a.drive && a.drive.type !== 'folder'); }
+  function driveDl(a) { return !!(a.drive && a.drive.type === 'file'); }
+  function bigToDrive() { return !!(window.CalDrive && window.CalDrive.enabled()); }
   function fmtBytes(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
   function bestPreview(a, minW) {
     var p = (a.previews || []).filter(function (x) { return x.url; }).sort(function (x, y) { return x.width - y.width; });
@@ -359,6 +387,7 @@
     return ok || p[p.length - 1];
   }
   function urlFor(a, size) {
+    if (a.drive && size === 'full' && kindOf(a) === 'image') return window.CalDrive.thumbUrl(a.drive.id, 2000);
     if (size === 'full' || kindOf(a) === 'video') return a.url;
     var p = bestPreview(a, size === 'cover' ? 700 : 360);
     return p ? p.url : a.url;
@@ -382,6 +411,12 @@
   function loadInto(el, a, size, onOk, onFail) {
     var url = urlFor(a, size), triedToken = false;
     function tryToken() {
+      if (a.drive && !triedToken && window.CalDrive.hasToken()) {
+        // El navegador no mandó la sesión de Google (p. ej. Safari dentro de Trello): miniatura vía API.
+        triedToken = true;
+        window.CalDrive.apiThumb(a.drive.id).then(function (src) { el.src = src; }).catch(function () { onFail(); });
+        return;
+      }
       if (triedToken || a.isUpload === false || !ctx.canWrite()) { onFail(); return; }
       triedToken = true;
       resolveMedia(a, size).then(function (src) { el.src = src; }).catch(function () { onFail(); });
@@ -422,6 +457,28 @@
       s.textContent = needAuth ? 'Autoriza para ver' : 'Sin vista previa';
       box.insertBefore(s, box.firstChild);
     }
+  }
+
+  // Visor de Google Drive (vídeos, PDF, documentos…) a pantalla completa.
+  var dv = null;
+  function openDriveViewer(id) {
+    var a = attById(id);
+    if (!a || !a.drive) return;
+    if (!dv) {
+      dv = document.createElement('div');
+      dv.className = 'cv-lb cv-dv';
+      dv.innerHTML = '<div class="cv-dv-box"><div class="cv-dv-h"><span></span><a target="_blank" rel="noopener">Abrir en Drive ↗</a>' +
+        '<button class="cv-lb-x" aria-label="Cerrar">×</button></div><iframe allow="autoplay; fullscreen" allowfullscreen></iframe>' +
+        '<p class="cv-dv-tip">¿No se ve? Inicia sesión en Google en este navegador o ábrelo en Drive. Los vídeos recién subidos tardan unos minutos en estar listos.</p></div>';
+      document.body.appendChild(dv);
+      var closeDv = function () { dv.hidden = true; dv.querySelector('iframe').src = 'about:blank'; };
+      dv.addEventListener('click', function (e) { if (e.target === dv || e.target.closest('.cv-lb-x')) closeDv(); });
+      document.addEventListener('keydown', function (e) { if (dv && !dv.hidden && e.key === 'Escape') { e.stopPropagation(); closeDv(); } }, true);
+    }
+    dv.querySelector('.cv-dv-h span').textContent = a.name || 'Google Drive';
+    dv.querySelector('.cv-dv-h a').href = a.url;
+    dv.querySelector('iframe').src = window.CalDrive.viewUrl(a.drive.id);
+    dv.hidden = false;
   }
 
   function playVideo(id) {
@@ -567,6 +624,10 @@
       else if (act === 'copy') copyLink();
       else if (act === 'cv-tab') { sp.tab = b.getAttribute('data-tab'); paint(); }
       else if (act === 'dl-all') downloadAll();
+      else if (act === 'upload') pickFiles();
+      else if (act === 'drive-view') openDriveViewer(b.getAttribute('data-att'));
+      else if (act === 'drive-connect') connectDrive();
+      else if (act === 'up-dismiss') { var uid = b.getAttribute('data-up'); uploads = uploads.filter(function (x) { return x.id !== uid; }); paint(); }
       else if (act === 'dl-one') { var oa = attById(b.getAttribute('data-att')); if (oa) workerDownload([oa], false); }
       else if (act === 'del-att') deleteAttachment(b.getAttribute('data-att'));
       else if (act === 'sp-net') { sp.net = b.getAttribute('data-net'); sp.slide = 0; sp.expanded = false; sp.editing = false; paint(); }
@@ -743,10 +804,18 @@
   function deleteAttachment(id) {
     var a = attById(id);
     if (!a || !needWrite()) return;
-    if (!confirm('¿Eliminar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nSe borra también en Trello y no se puede deshacer.')) return;
+    if (!confirm(a.drive
+      ? '¿Quitar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nEl archivo seguirá en Google Drive.'
+      : '¿Eliminar «' + (a.name || 'este adjunto') + '» de la tarjeta?\n\nSe borra también en Trello y no se puede deshacer.')) return;
     var cid = card.id;
     setBusy(true);
     ctx.api('DELETE', '/cards/' + cid + '/attachments/' + id).then(function () {
+      if (a.r2) {
+        ctx.authHeader().then(function (auth) {
+          return fetch(a.url, { method: 'DELETE', headers: { Authorization: auth } });
+        }).then(function (r) { if (!r.ok) throw new Error(); })
+          .catch(function () { ctx.toast('Quitado de la tarjeta, pero no se pudo borrar el archivo de Cloudflare', true); });
+      }
       var drop = function (list) { return (list || []).filter(function (x) { return x.id !== id; }); };
       if (full && full.attachments) full.attachments = drop(full.attachments);
       if (card && card.id === cid) {
@@ -794,21 +863,224 @@
   function downloadAll() {
     var atts = (full && full.attachments) || card.attachments || [];
     if (!atts.length) return;
-    var up = atts.filter(viaWorker), links = atts.filter(function (a) { return !viaWorker(a); });
+    var up = atts.filter(viaWorker), r2 = atts.filter(function (a) { return a.r2 || driveDl(a); });
+    var links = atts.filter(function (a) { return !viaWorker(a) && !a.r2 && !driveDl(a); });
     if (up.length) {
       workerDownload(up, true);
+      r2.forEach(function (a, i) { setTimeout(function () { clickDownload(a); }, 400 + i * 600); });
       if (links.length) ctx.toast(links.length + ' adjunto(s) son enlaces y no se descargan; ábrelos desde la lista.');
       return;
     }
     atts.forEach(function (a, i) {
       setTimeout(function () {
-        var el = document.createElement('a');
-        el.href = dlUrl(a); el.download = a.name || ''; el.target = '_blank'; el.rel = 'noopener';
-        document.body.appendChild(el); el.click(); el.remove();
+        clickDownload(a);
       }, i * 350);
     });
     ctx.toast('Abriendo ' + atts.length + ' adjuntos… Si se abren en pestañas, guárdalos con ⌘S.');
   }
+  function clickDownload(a) {
+    var el = document.createElement('a');
+    el.href = dlUrl(a); el.download = a.name || ''; el.target = '_blank'; el.rel = 'noopener';
+    document.body.appendChild(el); el.click(); el.remove();
+  }
+
+  // ───── Subidas ─────
+  // Hasta TRELLO_MAX_MB van a Trello como siempre (con su portada y vista previa). Lo que pasa de ahí
+  // se sube por trozos a Cloudflare R2 (worker/) con una miniatura hecha aquí, y la tarjeta recibe un enlace.
+  var TRELLO_MAX_MB = (window.CAL_CONFIG && window.CAL_CONFIG.TRELLO_MAX_MB) || 10;
+  var upInfo = null, uploads = [], upSeq = 0;
+  function loadUpInfo() {
+    var base = ctx.downloadBase && ctx.downloadBase();
+    if (!base || upInfo) return;
+    upInfo = { ok: false };
+    fetch(base + '/up/info').then(function (r) { return r.ok ? r.json() : { ok: false }; })
+      .then(function (res) { upInfo = res || { ok: false }; if (upInfo.ok && card) paint(); })
+      .catch(function () { upInfo = { ok: false }; });
+  }
+  function upLabel(u) {
+    if (u.wait) return fmtBytes(u.size) + ' · se guardará en Google Drive';
+    return u.pct >= 1 ? 'Guardando en la tarjeta…' : Math.round(u.pct * 100) + '% de ' + fmtBytes(u.size) +
+      (u.dest === 'drive' ? ' · Google Drive' : u.dest === 'r2' ? ' · Cloudflare' : '');
+  }
+  function upPaint(u) {
+    var el = root.querySelector('[data-up="' + u.id + '"]');
+    if (!el) return;
+    var bar = el.querySelector('.cv-up-bar i'), txt = el.querySelector('[data-up-pct]');
+    if (bar) bar.style.width = Math.round(u.pct * 100) + '%';
+    if (txt) txt.textContent = upLabel(u);
+  }
+  function pickFiles() {
+    if (!needWrite()) return;
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true; inp.style.display = 'none';
+    inp.onchange = function () { [].slice.call(inp.files || []).forEach(function (f) { uploadFile(card, f); }); inp.remove(); };
+    document.body.appendChild(inp); inp.click();
+  }
+  // Destino: Trello (pequeños) · Google Drive (grandes, si hay GOOGLE_CLIENT_ID) · Cloudflare R2 (grandes, si no).
+  function uploadFile(c, file) {
+    var big = file.size > TRELLO_MAX_MB * 1048576;
+    var u = { id: 'u' + (++upSeq), card: c.id, c: c, file: file, name: file.name, size: file.size, pct: 0,
+      dest: !big ? 'trello' : bigToDrive() ? 'drive' : 'r2' };
+    if (u.dest === 'r2' && !(upInfo && upInfo.ok)) { ctx.toast('«' + file.name + '» pasa de ' + TRELLO_MAX_MB + ' MB y no hay dónde guardarlo.', true); return; }
+    if (u.dest === 'r2' && file.size > upInfo.maxBytes) {
+      ctx.toast('«' + file.name + '» pasa del máximo de ' + Math.round(upInfo.maxBytes / 1048576) + ' MB.', true); return;
+    }
+    // Drive sin conectar: se queda en espera hasta que se pulse «Conectar Google Drive» (la ventana de Google necesita un clic).
+    u.wait = u.dest === 'drive' && !window.CalDrive.hasToken();
+    uploads.push(u); paint();
+    if (!u.wait) startUpload(u);
+  }
+  function connectDrive() {
+    window.CalDrive.connect().then(function () {
+      uploads.filter(function (u) { return u.wait; }).forEach(function (u) { u.wait = false; startUpload(u); });
+      paint();
+    }).catch(function (err) { ctx.toast('Google Drive: ' + (err && err.message ? err.message : err), true); });
+  }
+  function startUpload(u) {
+    var c = u.c, file = u.file;
+    var job = u.dest === 'drive' ? uploadDrive(c, file, u) : u.dest === 'r2' ? uploadR2(c, file, u) : uploadTrello(c, file, u);
+    job.then(function (att) {
+      uploads = uploads.filter(function (x) { return x !== u; });
+      if (window.CalShared) window.CalShared.fixAtt(att);
+      var add = function (list) { return list.some(function (x) { return x.id === att.id; }) ? list : list.concat([att]); };
+      if (full && full.attachments && card && card.id === c.id) full.attachments = add(full.attachments);
+      c.attachments = add(c.attachments || []);
+      if (c.badges) c.badges.attachments = (c.badges.attachments || 0) + 1;
+      if (card && card.id === c.id) paint();
+      ctx.onChange(c);
+      ctx.toast('Subido: ' + file.name);
+    }).catch(function (err) {
+      // El permiso de Google caduca a la hora: se vuelve a pedir con el botón y la subida se reintenta.
+      if (u.dest === 'drive' && !window.CalDrive.hasToken()) { u.wait = true; u.pct = 0; if (card && card.id === c.id) paint(); return; }
+      u.err = 'Error: ' + (err && err.message ? err.message : err).slice(0, 120);
+      if (card && card.id === c.id) paint();
+      ctx.toast('No se pudo subir «' + file.name + '»', true);
+    });
+  }
+  // Subida con progreso (fetch no informa del progreso de envío).
+  function xhr(method, url, body, headers, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var x = new XMLHttpRequest();
+      x.open(method, url);
+      Object.keys(headers || {}).forEach(function (k) { x.setRequestHeader(k, headers[k]); });
+      if (onProgress && x.upload) x.upload.onprogress = function (e) { onProgress(e.loaded); };
+      x.onload = function () {
+        if (x.status >= 200 && x.status < 300) {
+          try { resolve(x.responseText ? JSON.parse(x.responseText) : null); } catch (e) { resolve(null); }
+        } else reject(new Error((x.responseText || '').slice(0, 200) || ('HTTP ' + x.status)));
+      };
+      x.onerror = function () { reject(new Error('Fallo de red')); };
+      x.send(body);
+    });
+  }
+  function uploadDrive(c, file, u) {
+    var b = ctx.board() || {};
+    return window.CalDrive.upload(file, {
+      board: { id: b.id || c.idBoard || 'tablero', name: b.name }, type: file.type || guessType(file.name),
+      onProgress: function (n) { u.pct = Math.min(0.99, n / Math.max(1, file.size)); upPaint(u); }
+    }).then(function (f) {
+      u.pct = 1; upPaint(u);
+      if (f.shared === 'none') ctx.toast('«' + file.name + '» está en tu Drive pero no se ha compartido: los demás no lo verán hasta que lo compartas.', true);
+      return ctx.api('POST', '/cards/' + c.id + '/attachments', { url: f.url, name: file.name, mimeType: f.mimeType });
+    });
+  }
+  function uploadTrello(c, file, u) {
+    return ctx.authHeader().then(function (auth) {
+      if (!auth) throw new Error('Falta la autorización');
+      var fd = new FormData();
+      fd.append('file', file, file.name); fd.append('name', file.name);
+      return xhr('POST', 'https://api.trello.com/1/cards/' + c.id + '/attachments', fd, { Authorization: auth },
+        function (n) { u.pct = Math.min(0.99, n / Math.max(1, file.size)); upPaint(u); });
+    });
+  }
+  function uploadR2(c, file, u) {
+    var base = ctx.downloadBase(), auth, tk, done = [];
+    var type = file.type || guessType(file.name);
+    return Promise.all([ctx.authHeader(), makeThumb(file, type)]).then(function (r) {
+      auth = r[0];
+      if (!auth) throw new Error('Falta la autorización');
+      var thumb = r[1];
+      return fetch(base + '/up/start', {
+        method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card: c.id, name: file.name, type: type, size: file.size, thumb: !!thumb })
+      }).then(okJson).then(function (res) {
+        tk = res;
+        return thumb ? fetch(base + '/up/thumb?t=' + encodeURIComponent(tk.ticket), { method: 'PUT', body: thumb }).catch(function () {}) : null;
+      });
+    }).then(function () {
+      // Trozos de 8 MB, tres a la vez, con hasta 3 reintentos cada uno.
+      var sent = {}, next = 1, total = tk.parts;
+      function report() {
+        var n = 0; Object.keys(sent).forEach(function (k) { n += sent[k]; });
+        u.pct = Math.min(0.99, n / file.size); upPaint(u);
+      }
+      function sendPart(n, tries) {
+        var blob = file.slice((n - 1) * tk.partSize, Math.min(file.size, n * tk.partSize));
+        return xhr('PUT', base + '/up/part?t=' + encodeURIComponent(tk.ticket) + '&n=' + n, blob,
+          { 'Content-Type': 'application/octet-stream' }, function (b) { sent[n] = b; report(); })
+          .catch(function (err) {
+            sent[n] = 0; report();
+            if (tries >= 3) throw err;
+            return new Promise(function (ok) { setTimeout(ok, 1000 * tries); }).then(function () { return sendPart(n, tries + 1); });
+          });
+      }
+      function worker() {
+        if (next > total) return Promise.resolve();
+        var n = next++;
+        return sendPart(n, 1).then(function (res) { done.push({ n: res.n, etag: res.etag }); sent[n] = blobLen(n); report(); return worker(); });
+      }
+      function blobLen(n) { return Math.min(file.size, n * tk.partSize) - (n - 1) * tk.partSize; }
+      return Promise.all([worker(), worker(), worker()]);
+    }).then(function () {
+      return fetch(base + '/up/done?t=' + encodeURIComponent(tk.ticket), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parts: done })
+      }).then(okJson);
+    }).then(function (res) {
+      u.pct = 1; upPaint(u);
+      return ctx.api('POST', '/cards/' + c.id + '/attachments', { url: res.url, name: file.name, mimeType: type });
+    }).catch(function (err) {
+      if (tk) fetch(base + '/up/abort?t=' + encodeURIComponent(tk.ticket), { method: 'POST' }).catch(function () {});
+      throw err;
+    });
+  }
+  function okJson(r) {
+    if (!r.ok) return r.text().then(function (x) { throw new Error(x || ('HTTP ' + r.status)); });
+    return r.json();
+  }
+  function guessType(name) {
+    var ext = (String(name).match(/\.([a-z0-9]+)$/i) || [, ''])[1].toLowerCase();
+    return { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+      png: 'image/png', gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf', zip: 'application/zip' }[ext] || 'application/octet-stream';
+  }
+  // Miniatura JPEG (máx. 640 px) de imágenes y vídeos, hecha en el navegador. null si no se puede.
+  function makeThumb(file, type) {
+    var kind = /^image\//.test(type) ? 'image' : /^video\//.test(type) ? 'video' : null;
+    if (!kind) return Promise.resolve(null);
+    var src = URL.createObjectURL(file);
+    function draw(el, w, h) {
+      var k = Math.min(1, 640 / Math.max(w, h)), cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+      cv.getContext('2d').drawImage(el, 0, 0, cv.width, cv.height);
+      return new Promise(function (ok) { cv.toBlob(ok, 'image/jpeg', 0.8); });
+    }
+    var p = new Promise(function (resolve, reject) {
+      if (kind === 'image') {
+        var img = new Image();
+        img.onload = function () { draw(img, img.naturalWidth, img.naturalHeight).then(resolve, reject); };
+        img.onerror = reject; img.src = src;
+      } else {
+        var v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'auto';
+        v.onloadedmetadata = function () { v.currentTime = Math.min(1, (v.duration || 2) / 10); };
+        v.onseeked = function () { draw(v, v.videoWidth, v.videoHeight).then(resolve, reject); };
+        v.onerror = reject; v.src = src;
+      }
+    });
+    var timeout = new Promise(function (ok) { setTimeout(function () { ok(null); }, 10000); });
+    return Promise.race([p, timeout]).catch(function () { return null; })
+      .then(function (b) { URL.revokeObjectURL(src); return b && b.size ? b : null; });
+  }
+
   function copyLink() {
     var url = card.shortUrl || card.url;
     var ok = function () { ctx.toast('Enlace copiado'); };
@@ -831,6 +1103,7 @@
       .then(function (res) {
         if (!card || card.id !== id || !res) return;
         full = { checklists: res.checklists || [], attachments: res.attachments || [], actions: res.actions || [] };
+        if (window.CalShared) full.attachments.forEach(window.CalShared.fixAtt);
         if (res.desc != null) card.desc = res.desc;
         if (res.shortUrl) card.shortUrl = res.shortUrl;
         var active = document.activeElement && root.contains(document.activeElement) && document.activeElement.matches('textarea, input');
@@ -843,6 +1116,8 @@
   function open(c) {
     card = c; full = null; sp = { tab: 'details', net: null, slide: 0, expanded: false, editing: false };
     root.hidden = false;
+    loadUpInfo();
+    if (window.CalDrive) window.CalDrive.warmUp();
     paint();
     loadFull();
     setTimeout(function () { var x = $('.cv-x'); if (x) x.focus(); }, 30);

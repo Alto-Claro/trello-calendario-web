@@ -7,20 +7,16 @@
 (function () {
   'use strict';
 
-  var VERSION = '2026-11-redes';
+  var VERSION = '2026-11-drive';
   var KEY = 'novedades';
 
   var ITEMS = [
-    { ico: '📱', t: 'Vista previa en redes',
-      d: 'Nueva pestaña en cada tarjeta para ver el post como quedaría publicado. Sale sola según las etiquetas: IG, FB, TT, YT y el formato (REEL, STORY, CARRUSEL).' },
-    { ico: '✍️', t: 'Copy distinto para cada red',
-      d: 'En la vista previa puedes personalizar el texto de una red sin tocar las demás. Se guarda en la descripción de la tarjeta.' },
-    { ico: '💬', t: 'Comentarios a la derecha',
-      d: 'Ahora están en la columna derecha, debajo de los adjuntos. Se publican con el botón «Enviar».' },
-    { ico: '📎', t: 'Adjuntos más a mano',
-      d: 'Arriba a la derecha, con «Descargar todo» y una papelera para eliminar cada uno.' },
-    { ico: '🔤', t: 'Descripción con formato',
-      d: 'Títulos, negritas, listas y separadores se ven igual que en Trello.' }
+    { ico: '⬆️', t: 'Sube archivos desde la tarjeta',
+      d: 'Botón «＋ Subir» junto a los adjuntos. Hasta 10 MB van a Trello como siempre; los más grandes, a Google Drive.' },
+    { ico: '📁', t: 'Archivos grandes en Google Drive',
+      d: 'La primera vez pulsa «Conectar Google Drive». Se guardan en una carpeta del tablero en tu Drive y se pueden ver con el enlace.' },
+    { ico: '🎬', t: 'Vista previa de Drive',
+      d: 'Los enlaces de Drive se ven con miniatura, y vídeos, PDF y presentaciones se abren sin salir de la tarjeta.' }
   ];
 
   var CSS = '' +
