@@ -628,7 +628,7 @@
   function resolveMedia(a, size) {
     var url = urlFor(a, size);
     if (mediaCache[url]) return mediaCache[url];
-    var p = a.isUpload === false ? Promise.resolve(url) : ctx.mediaUrl(url);
+    var p = a.isUpload === false ? Promise.resolve(url) : ctx.mediaUrl(url, { w: size === 'full' ? 1600 : size === 'cover' ? 800 : 400, full: kindOf(a) === 'video' });
     mediaCache[url] = p.catch(function (err) { delete mediaCache[url]; throw err; });
     return mediaCache[url];
   }
@@ -642,6 +642,13 @@
   function loadInto(el, a, size, onOk, onFail) {
     var url = urlFor(a, size), triedToken = false;
     function tryToken() {
+      if (a.drive && !triedToken && window.CalDrive.viaScript()) {
+        // Miniatura servida por el script de subidas (vale para quien no es dueño del archivo).
+        triedToken = true;
+        window.CalDrive.scriptThumb(a.drive.id, size === 'full' ? 1600 : size === 'cover' ? 800 : 400)
+          .then(function (src) { el.src = src; }).catch(function () { onFail(); });
+        return;
+      }
       if (a.drive && !triedToken && window.CalDrive.hasToken()) {
         // El navegador no mandó la sesión de Google (p. ej. Safari dentro de Trello): miniatura vía API.
         triedToken = true;
@@ -1365,7 +1372,7 @@
       ctx.toast('«' + file.name + '» pasa del máximo de ' + Math.round(upInfo.maxBytes / 1048576) + ' MB.', true); return;
     }
     // Drive sin conectar: se queda en espera hasta que se pulse «Conectar Google Drive» (la ventana de Google necesita un clic).
-    u.wait = u.dest === 'drive' && !window.CalDrive.hasToken();
+    u.wait = u.dest === 'drive' && !window.CalDrive.viaScript() && !window.CalDrive.hasToken();
     uploads.push(u); paint();
     if (!u.wait) startUpload(u);
   }
@@ -1390,7 +1397,7 @@
       ctx.toast('Subido: ' + file.name);
     }).catch(function (err) {
       // El permiso de Google caduca a la hora: se vuelve a pedir con el botón y la subida se reintenta.
-      if (u.dest === 'drive' && !window.CalDrive.hasToken()) { u.wait = true; u.pct = 0; if (card && card.id === c.id) paint(); return; }
+      if (u.dest === 'drive' && !window.CalDrive.viaScript() && !window.CalDrive.hasToken()) { u.wait = true; u.pct = 0; if (card && card.id === c.id) paint(); return; }
       u.err = 'Error: ' + (err && err.message ? err.message : err).slice(0, 120);
       if (card && card.id === c.id) paint();
       ctx.toast('No se pudo subir «' + file.name + '»', true);
@@ -1414,6 +1421,19 @@
   }
   function uploadDrive(c, file, u) {
     var b = ctx.board() || {};
+    if (window.CalDrive.viaScript()) {
+      return ctx.authHeader().then(function (auth) {
+        if (!auth) throw new Error('Falta la autorización');
+        return window.CalDrive.uploadShared(file, {
+          auth: auth, card: c.id, thumb: makeThumb(file, file.type || guessType(file.name)), board: { id: b.id || c.idBoard, name: b.name }, type: file.type || guessType(file.name),
+          onProgress: function (n) { u.pct = Math.min(0.99, n / Math.max(1, file.size)); upPaint(u); }
+        });
+      }).then(function (f) {
+        u.pct = 1; upPaint(u);
+        if (f.shared === 'none') ctx.toast('«' + file.name + '» se ha subido, pero no se ha podido compartir: los demás no lo verán.', true);
+        return ctx.api('POST', '/cards/' + c.id + '/attachments', { url: f.url, name: file.name, mimeType: f.mimeType });
+      });
+    }
     return window.CalDrive.upload(file, {
       board: { id: b.id || c.idBoard || 'tablero', name: b.name }, type: file.type || guessType(file.name),
       onProgress: function (n) { u.pct = Math.min(0.99, n / Math.max(1, file.size)); upPaint(u); }
