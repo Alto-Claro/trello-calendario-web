@@ -49,7 +49,7 @@
 
   // ───── Conexión con Google (Google Identity Services) ─────
   var gisLoad = null, tokenClient = null, tok = null, pending = null;
-  function enabled() { return !!C.GOOGLE_CLIENT_ID; }
+  function enabled() { return !!(C.GOOGLE_CLIENT_ID || C.DRIVE_UPLOAD_URL); }
   try {
     var saved = JSON.parse(sessionStorage.getItem(TOK_KEY) || 'null');
     if (saved && saved.exp > Date.now() + 60000) tok = saved;
@@ -210,7 +210,41 @@
     });
   }
 
+  // ───── Subida al Drive de la agencia a través del script (apps-script/Codigo.gs) ─────
+  // No necesita cuenta de Google: el script comprueba con Trello (auth = cabecera OAuth de Trello)
+  // que quien sube ve la tarjeta, abre la subida en su Drive y el navegador envía el archivo a Google.
+  function viaScript() { return !!C.DRIVE_UPLOAD_URL; }
+  function script(body) {
+    return fetch(C.DRIVE_UPLOAD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { if (!r.ok) throw new Error('El servicio de subidas respondió ' + r.status); return r.json(); })
+      .then(function (j) { if (!j || !j.ok) throw new Error((j && j.error) || 'Error del servicio de subidas'); return j; });
+  }
+  function uploadShared(file, o) {
+    var type = o.type || file.type || 'application/octet-stream';
+    return script({ action: 'start', auth: o.auth, card: o.card, boardName: o.board && o.board.name,
+      name: file.name, type: type, size: file.size, origin: location.origin
+    }).then(function (st) {
+      return new Promise(function (resolve, reject) {
+        var x = new XMLHttpRequest();
+        x.open('PUT', st.uploadUrl);
+        x.setRequestHeader('Content-Type', type);
+        if (x.upload && o.onProgress) x.upload.onprogress = function (e) { o.onProgress(e.loaded); };
+        x.onload = function () {
+          if (x.status >= 200 && x.status < 300) { try { resolve(JSON.parse(x.responseText)); } catch (e) { reject(e); } }
+          else reject(new Error(googleError(x.responseText) || ('Google respondió ' + x.status)));
+        };
+        x.onerror = function () { reject(new Error('Fallo de red al subir')); };
+        x.send(file);
+      });
+    }).then(function (f) {
+      return script({ action: 'finish', auth: o.auth, card: o.card, id: f.id });
+    }).then(function (r) {
+      return { id: r.id, name: r.name, mimeType: r.mimeType || type, url: r.url, shared: r.shared };
+    });
+  }
+
   window.CalDrive = {
+    viaScript: viaScript, uploadShared: uploadShared,
     enabled: enabled, parse: parse, fix: fix, thumbUrl: thumbUrl, viewUrl: viewUrl, openUrl: openUrl, dlUrl: dlUrl,
     hasToken: hasToken, connect: connect, warmUp: warmUp, apiThumb: apiThumb, upload: upload
   };
