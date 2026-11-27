@@ -279,7 +279,21 @@
     scriptThumb(m[1], w || 400).then(function (src) { img.src = src; }).catch(gone);
   }
 
+  // Imagen/vídeo subido a Trello, descargado por el script con la autorización de quien mira.
+  var tMedia = {};
+  function trelloMedia(o) {
+    if (!viaScript()) return Promise.reject(new Error('Sin servicio'));
+    var k = o.att + '_' + (o.full ? 'f' : o.w || 400);
+    if (!tMedia[k]) {
+      tMedia[k] = script({ action: 'trello', auth: o.auth, card: o.card, att: o.att, w: o.w || 400, full: !!o.full })
+        .then(function (r) { return r.src; });
+      tMedia[k].catch(function () { delete tMedia[k]; });
+    }
+    return tMedia[k];
+  }
+
   window.CalDrive = {
+    trelloMedia: trelloMedia,
     viaScript: viaScript, uploadShared: uploadShared, scriptThumb: scriptThumb, fixImg: fixImg,
     enabled: enabled, parse: parse, fix: fix, thumbUrl: thumbUrl, viewUrl: viewUrl, openUrl: openUrl, dlUrl: dlUrl,
     hasToken: hasToken, connect: connect, warmUp: warmUp, apiThumb: apiThumb, upload: upload

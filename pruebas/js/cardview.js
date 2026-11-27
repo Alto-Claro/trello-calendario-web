@@ -628,7 +628,7 @@
   function resolveMedia(a, size) {
     var url = urlFor(a, size);
     if (mediaCache[url]) return mediaCache[url];
-    var p = a.isUpload === false ? Promise.resolve(url) : ctx.mediaUrl(url);
+    var p = a.isUpload === false ? Promise.resolve(url) : ctx.mediaUrl(url, { w: size === 'full' ? 1600 : size === 'cover' ? 800 : 400, full: kindOf(a) === 'video' });
     mediaCache[url] = p.catch(function (err) { delete mediaCache[url]; throw err; });
     return mediaCache[url];
   }

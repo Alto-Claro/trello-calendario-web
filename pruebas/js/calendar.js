@@ -632,7 +632,10 @@
   }
   function apiPut(path, body) { return apiRequest('PUT', path, body); }
   // Descarga un adjunto de Trello con el token (los subidos a Trello no son públicos) y devuelve una URL local.
-  function mediaUrl(url) {
+  // Si el navegador no puede descargarlo (Trello no lo permite fuera de su web), lo descarga el script de subidas.
+  // o: { w: ancho de la miniatura, full: el archivo original (vídeos) }.
+  function mediaUrl(url, o) {
+    o = o || {};
     if (t.__mockWrite) return Promise.resolve(url);
     return getToken().then(function (tok) {
       if (!tok) throw new Error('No autorizado');
@@ -641,8 +644,12 @@
       return fetch(u, { headers: { Authorization: auth } }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.blob();
+      }).then(function (b) { return URL.createObjectURL(b); }).catch(function (err) {
+        var m = /\/cards\/([0-9a-f]{24})\/attachments\/([0-9a-f]{24})/i.exec(url);
+        if (!m || !window.CalDrive || !CalDrive.viaScript()) throw err;
+        return CalDrive.trelloMedia({ auth: auth, card: m[1], att: m[2], w: o.w || 400, full: !!o.full });
       });
-    }).then(function (b) { return URL.createObjectURL(b); });
+    });
   }
   // Miniatura que no carga (p. ej. ventana de incógnito o navegador que bloquea las cookies de Trello/Google
   // dentro del calendario): las de Drive se piden al script de subidas; las de Trello, con el token.
