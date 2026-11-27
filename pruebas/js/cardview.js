@@ -642,6 +642,13 @@
   function loadInto(el, a, size, onOk, onFail) {
     var url = urlFor(a, size), triedToken = false;
     function tryToken() {
+      if (a.drive && !triedToken && window.CalDrive.viaScript()) {
+        // Miniatura servida por el script de subidas (vale para quien no es dueño del archivo).
+        triedToken = true;
+        window.CalDrive.scriptThumb(a.drive.id, size === 'full' ? 1600 : size === 'cover' ? 800 : 400)
+          .then(function (src) { el.src = src; }).catch(function () { onFail(); });
+        return;
+      }
       if (a.drive && !triedToken && window.CalDrive.hasToken()) {
         // El navegador no mandó la sesión de Google (p. ej. Safari dentro de Trello): miniatura vía API.
         triedToken = true;
@@ -1418,7 +1425,7 @@
       return ctx.authHeader().then(function (auth) {
         if (!auth) throw new Error('Falta la autorización');
         return window.CalDrive.uploadShared(file, {
-          auth: auth, card: c.id, board: { id: b.id || c.idBoard, name: b.name }, type: file.type || guessType(file.name),
+          auth: auth, card: c.id, thumb: makeThumb(file, file.type || guessType(file.name)), board: { id: b.id || c.idBoard, name: b.name }, type: file.type || guessType(file.name),
           onProgress: function (n) { u.pct = Math.min(0.99, n / Math.max(1, file.size)); upPaint(u); }
         });
       }).then(function (f) {

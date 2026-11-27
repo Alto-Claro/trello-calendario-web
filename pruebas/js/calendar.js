@@ -214,7 +214,7 @@
       }).join('');
       var th = thumbsOn() ? thumbFor(card) : null, coverCol = card.cover && card.cover.color && !th;
       return '<div class="' + cls.join(' ') + '"' + style + attrs + '>' +
-        (th ? '<div class="ev-thumb"><img src="' + esc(th) + '" alt="" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.remove()"></div>' : '') +
+        (th ? '<div class="ev-thumb"><img src="' + esc(th) + '" alt="" loading="lazy" decoding="async" draggable="false" onerror="__calImgFail(this)"></div>' : '') +
         (coverCol ? '<div class="ev-covercol" style="background:' + S.labelColor(card.cover.color) + '"></div>' : '') +
         (labels ? '<div class="ev-labels">' + labels + '</div>' : '') +
         '<div class="ev-line">' + time + '<span class="name">' + esc(card.name) + '</span></div>' +
@@ -644,6 +644,15 @@
       });
     }).then(function (b) { return URL.createObjectURL(b); });
   }
+  // Miniatura que no carga (p. ej. ventana de incógnito o navegador que bloquea las cookies de Trello/Google
+  // dentro del calendario): las de Drive se piden al script de subidas; las de Trello, con el token.
+  window.__calImgFail = function (img) {
+    var src = img.getAttribute('src') || '';
+    if (/drive\.google\.com|googleusercontent\.com/.test(src) && window.CalDrive) { window.CalDrive.fixImg(img); return; }
+    if (img.getAttribute('data-tok') || !/trello\.com\/1\//.test(src)) { if (img.parentNode) img.parentNode.remove(); return; }
+    img.setAttribute('data-tok', '1');
+    mediaUrl(src).then(function (u) { img.src = u; }).catch(function () { if (img.parentNode) img.parentNode.remove(); });
+  };
   function apiRequest(method, path, body) {
     if (t.__mockWrite) return t.__mockWrite(path, body, method);
     return getToken().then(function (token) {
@@ -962,7 +971,7 @@
     var vid = (card.attachments || []).some(function (a) { return /^video\//.test(a.mimeType || '') || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(a.name || ''); });
     var p = document.createElement('div');
     p.id = 'peek'; p.className = 'peek';
-    p.innerHTML = (th ? '<div class="pk-img"><img src="' + esc(th) + '" alt="" onerror="this.parentNode.remove()">' + (vid ? '<span>▶</span>' : '') + '</div>' : '') +
+    p.innerHTML = (th ? '<div class="pk-img"><img src="' + esc(th) + '" alt="" onerror="__calImgFail(this)">' + (vid ? '<span>▶</span>' : '') + '</div>' : '') +
       '<div class="pk-b">' + (labels ? '<div class="pk-lb">' + labels + '</div>' : '') +
       '<h4>' + esc(card.name) + '</h4>' +
       '<div class="pk-r">' + (d ? '<span class="' + (isLate(card) ? 'late' : '') + '">📅 ' + esc(fmt(d, { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' + esc(fmtTime(d)) + '</span>' : '') +

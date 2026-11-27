@@ -219,6 +219,13 @@
       .then(function (r) { if (!r.ok) throw new Error('El servicio de subidas respondió ' + r.status); return r.json(); })
       .then(function (j) { if (!j || !j.ok) throw new Error((j && j.error) || 'Error del servicio de subidas'); return j; });
   }
+  function b64url(blob) {
+    return new Promise(function (ok, ko) {
+      var r = new FileReader();
+      r.onload = function () { ok(String(r.result).split(',')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')); };
+      r.onerror = ko; r.readAsDataURL(blob);
+    });
+  }
   function uploadShared(file, o) {
     var type = o.type || file.type || 'application/octet-stream';
     return script({ action: 'start', auth: o.auth, card: o.card, boardName: o.board && o.board.name,
@@ -237,14 +244,43 @@
         x.send(file);
       });
     }).then(function (f) {
-      return script({ action: 'finish', auth: o.auth, card: o.card, id: f.id });
+      // Miniatura hecha en el navegador: Google tarda (o no llega) a generar la de los vídeos grandes.
+      return Promise.resolve(o.thumb).then(function (tb) { return tb ? b64url(tb) : null; }).catch(function () { return null; })
+        .then(function (thumb) { return script({ action: 'finish', auth: o.auth, card: o.card, id: f.id, thumb: thumb }); });
     }).then(function (r) {
       return { id: r.id, name: r.name, mimeType: r.mimeType || type, url: r.url, shared: r.shared };
     });
   }
 
+  // Miniatura servida por el script (Google no da las de los vídeos a quien no es el dueño del archivo).
+  var sThumbs = {};
+  function scriptThumb(id, w) {
+    if (!viaScript()) return Promise.reject(new Error('Sin servicio'));
+    w = w || 400;
+    var k = id + '_' + w;
+    if (!sThumbs[k]) {
+      var stored = null;
+      try { stored = sessionStorage.getItem('calT_' + k); } catch (e) {}
+      sThumbs[k] = stored ? Promise.resolve(stored) : script({ action: 'thumb', id: id, w: w }).then(function (r) {
+        if (!r.src) throw new Error('Sin miniatura todavía');
+        try { sessionStorage.setItem('calT_' + k, r.src); } catch (e) {}
+        return r.src;
+      });
+      sThumbs[k].catch(function () { delete sThumbs[k]; });
+    }
+    return sThumbs[k];
+  }
+  // Para <img onerror>: si la miniatura de Drive no carga, se pide al script; si tampoco, se quita.
+  function fixImg(img, w) {
+    var m = /[?&]id=([\w-]+)/.exec(img.src || '') || /\/d\/([\w-]{10,})/.exec(img.src || '');
+    var gone = function () { if (img.parentNode && img.getAttribute('data-rm') !== 'no') img.parentNode.remove(); };
+    if (!m || img.getAttribute('data-sth')) { gone(); return; }
+    img.setAttribute('data-sth', '1');
+    scriptThumb(m[1], w || 400).then(function (src) { img.src = src; }).catch(gone);
+  }
+
   window.CalDrive = {
-    viaScript: viaScript, uploadShared: uploadShared,
+    viaScript: viaScript, uploadShared: uploadShared, scriptThumb: scriptThumb, fixImg: fixImg,
     enabled: enabled, parse: parse, fix: fix, thumbUrl: thumbUrl, viewUrl: viewUrl, openUrl: openUrl, dlUrl: dlUrl,
     hasToken: hasToken, connect: connect, warmUp: warmUp, apiThumb: apiThumb, upload: upload
   };
