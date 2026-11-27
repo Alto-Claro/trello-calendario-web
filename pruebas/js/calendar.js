@@ -691,7 +691,15 @@
     row('Versión')(true, (ver.match(/v=(\d+)/) || [, '?'])[1] + ' · ' + ((navigator.userAgent.match(/(Edg|Chrome|Firefox)\/[\d]+/) || navigator.userAgent.match(/Version\/[\d]+.*Safari/) || ['?'])[0]));
     var all = [];
     state.cards.forEach(function (c) { (c.attachments || []).forEach(function (a) { all.push(a); }); });
-    var tAtt = all.filter(function (a) { return a.isUpload && /^image\//.test(a.mimeType || '') && (a.previews || []).length; })[0];
+    var looksImg = function (a) { return /^image\//.test(a.mimeType || '') || IMG_RE.test(a.name || a.url || ''); };
+    var tAtt = all.filter(function (a) { return !a.drive && looksImg(a) && (a.previews || []).length; })[0] ||
+      all.filter(function (a) { return !a.drive && looksImg(a); })[0];
+    var ex = tAtt || all.filter(function (a) { return !a.drive; })[0];
+    row('Adjuntos recibidos')(true, all.length + ' en total · ' + all.filter(function (a) { return a.isUpload; }).length + ' subidos · ' +
+      all.filter(function (a) { return (a.previews || []).length; }).length + ' con vista previa · ' + all.filter(looksImg).length + ' imágenes · ' +
+      all.filter(function (a) { return a.drive; }).length + ' de Drive' +
+      (ex ? ' · ejemplo: ' + JSON.stringify({ name: ex.name, url: String(ex.url || '').slice(0, 90), mimeType: ex.mimeType, isUpload: ex.isUpload,
+        previews: (ex.previews || []).length, prev0: ((ex.previews || [])[0] || {}).url ? String(ex.previews[0].url).slice(0, 90) : null }) : ''));
     var dAtt = all.filter(function (a) { return a.drive && a.drive.type === 'file'; }).slice(-1)[0];
     var rTok = row('Autorización del calendario (Trello)'), rCk = row('Imagen de Trello con tu sesión (cookies)'),
       rTk = row('Imagen de Trello con la autorización'), rDd = row('Miniatura de Drive directa'),
@@ -702,9 +710,9 @@
         .then(function (r) { rTok(r.ok, r.ok ? 'válida' : 'Trello la rechaza (' + r.status + ')'); return r.ok ? tok : null; })
         .catch(function (e) { rTok(false, 'error de red: ' + e.message); return null; });
     }).then(function (tok) {
-      if (!tAtt) { rCk(null, 'no hay imágenes subidas a Trello en este tablero'); rTk(null, ''); return; }
-      var p = (tAtt.previews || []).slice().sort(function (x, y) { return x.width - y.width; });
-      var url = (p.filter(function (x) { return x.width >= 240; })[0] || p[p.length - 1]).url;
+      if (!tAtt) { rCk(null, 'no hay imágenes de Trello en este tablero'); rTk(null, ''); return; }
+      var p = (tAtt.previews || []).filter(function (x) { return x.url; }).sort(function (x, y) { return x.width - y.width; });
+      var url = p.length ? (p.filter(function (x) { return x.width >= 240; })[0] || p[p.length - 1]).url : tAtt.url;
       return imgTest(url).then(function (r) {
         rCk(r === 'ok', r + ' · «' + tAtt.name + '»');
         if (!tok) { rTk(false, 'sin autorización'); return; }
