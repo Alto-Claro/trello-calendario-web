@@ -653,6 +653,74 @@
     img.setAttribute('data-tok', '1');
     mediaUrl(src).then(function (u) { img.src = u; }).catch(function () { if (img.parentNode) img.parentNode.remove(); });
   };
+  // ───── Diagnóstico de imágenes (menú ⋯): qué funciona en este navegador para ver miniaturas ─────
+  function runDiag() {
+    var box = document.createElement('div');
+    box.className = 'wn-wrap';
+    box.innerHTML = '<div class="wn" role="dialog" aria-modal="true" style="max-width:560px"><p class="wn-k">Diagnóstico</p>' +
+      '<h2>Imágenes en este navegador</h2><ul class="dg"></ul><div class="wn-f" style="gap:8px"><button class="btn" data-dg-copy>Copiar resultado</button>' +
+      '<button class="btn primary" data-dg-ok>Cerrar</button></div></div>';
+    document.body.appendChild(box);
+    var ul = box.querySelector('.dg'), lines = [];
+    ul.style.cssText = 'list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13px';
+    function row(label) {
+      var li = document.createElement('li'); li.textContent = '… ' + label; ul.appendChild(li);
+      return function (ok, info) {
+        var txt = (ok === null ? '– ' : ok ? '✓ ' : '✗ ') + label + (info ? ': ' + info : '');
+        li.textContent = txt; li.style.color = ok === false ? 'var(--danger, #c9372c)' : ''; lines.push(txt);
+      };
+    }
+    box.addEventListener('click', function (e) {
+      if (e.target === box || e.target.closest('[data-dg-ok]')) box.remove();
+      if (e.target.closest('[data-dg-copy]')) {
+        var txt = lines.join('\n');
+        (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast('Copiado'); }, function () { prompt('Copia el resultado:', txt); });
+      }
+    });
+    function imgTest(src) {
+      return new Promise(function (ok) {
+        if (!src) { ok(null); return; }
+        var i = new Image(), done = false;
+        var end = function (v) { if (!done) { done = true; ok(v); } };
+        i.onload = function () { end(i.naturalWidth > 1 ? 'ok' : 'vacía'); }; i.onerror = function () { end('error'); };
+        setTimeout(function () { end('sin respuesta'); }, 12000);
+        i.src = src;
+      });
+    }
+    var ver = (document.querySelector('script[src*="calendar.js"]') || {}).src || '';
+    row('Versión')(true, (ver.match(/v=(\d+)/) || [, '?'])[1] + ' · ' + ((navigator.userAgent.match(/(Edg|Chrome|Firefox)\/[\d]+/) || navigator.userAgent.match(/Version\/[\d]+.*Safari/) || ['?'])[0]));
+    var all = [];
+    state.cards.forEach(function (c) { (c.attachments || []).forEach(function (a) { all.push(a); }); });
+    var tAtt = all.filter(function (a) { return a.isUpload && /^image\//.test(a.mimeType || '') && (a.previews || []).length; })[0];
+    var dAtt = all.filter(function (a) { return a.drive && a.drive.type === 'file'; }).slice(-1)[0];
+    var rTok = row('Autorización del calendario (Trello)'), rCk = row('Imagen de Trello con tu sesión (cookies)'),
+      rTk = row('Imagen de Trello con la autorización'), rDd = row('Miniatura de Drive directa'),
+      rDs = row('Miniatura de Drive por el servicio de subidas');
+    getToken().then(function (tok) {
+      if (!tok) { rTok(false, 'no hay; pulsa «Autorizar edición»'); return null; }
+      return fetch('https://api.trello.com/1/members/me?fields=username&key=' + encodeURIComponent(C.APP_KEY) + '&token=' + encodeURIComponent(tok))
+        .then(function (r) { rTok(r.ok, r.ok ? 'válida' : 'Trello la rechaza (' + r.status + ')'); return r.ok ? tok : null; })
+        .catch(function (e) { rTok(false, 'error de red: ' + e.message); return null; });
+    }).then(function (tok) {
+      if (!tAtt) { rCk(null, 'no hay imágenes subidas a Trello en este tablero'); rTk(null, ''); return; }
+      var p = (tAtt.previews || []).slice().sort(function (x, y) { return x.width - y.width; });
+      var url = (p.filter(function (x) { return x.width >= 240; })[0] || p[p.length - 1]).url;
+      return imgTest(url).then(function (r) {
+        rCk(r === 'ok', r + ' · «' + tAtt.name + '»');
+        if (!tok) { rTk(false, 'sin autorización'); return; }
+        return mediaUrl(url).then(function (u) { return imgTest(u); }).then(function (r2) { rTk(r2 === 'ok', r2); })
+          .catch(function (e) { rTk(false, e.message); });
+      });
+    }).then(function () {
+      if (!dAtt) { rDd(null, 'no hay archivos de Drive en este tablero'); rDs(null, ''); return; }
+      return imgTest(window.CalDrive ? CalDrive.thumbUrl(dAtt.drive.id, 400) : '').then(function (r) {
+        rDd(r === 'ok', r + ' · «' + dAtt.name + '»');
+        if (!window.CalDrive || !CalDrive.viaScript()) { rDs(false, 'servicio no configurado'); return; }
+        return CalDrive.scriptThumb(dAtt.drive.id, 400).then(function (src) { return imgTest(src); })
+          .then(function (r2) { rDs(r2 === 'ok', r2); }).catch(function (e) { rDs(false, e.message); });
+      });
+    });
+  }
   function apiRequest(method, path, body) {
     if (t.__mockWrite) return t.__mockWrite(path, body, method);
     return getToken().then(function (token) {
@@ -778,6 +846,7 @@
       if (w === 'refresh') $('refresh').click();
       else if (w === 'ics') exportIcs();
       else if (w === 'news' && window.CalWhatsNew) window.CalWhatsNew.show(t);
+      else if (w === 'diag') runDiag();
     };
     document.addEventListener('click', function (e) { if (!e.target.closest('.menu-w')) $('moreMenu').hidden = true; });
     $('hours').onchange = function (e) { state.prefs.hours = e.target.value; state.weekShown = null; savePrefs(); render(); };
